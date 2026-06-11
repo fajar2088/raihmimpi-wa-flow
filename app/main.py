@@ -49,16 +49,19 @@ def decrypt_request(body):
         padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
     )
 
+    # Untuk dekripsi: gunakan IV asli
+    tag = encrypted_flow_data[-16:]
+    ciphertext = encrypted_flow_data[:-16]
+
+    decryptor = Cipher(algorithms.AES(aes_key), modes.GCM(initial_vector, tag), backend=default_backend()).decryptor()
+    decrypted = decryptor.update(ciphertext) + decryptor.finalize()
+
+    # Untuk enkripsi response: gunakan flipped IV
     iv_bytes = bytearray(initial_vector)
     iv_bytes[-1] ^= 0xFF
     flipped_iv = bytes(iv_bytes)
 
-    tag = encrypted_flow_data[-16:]
-    ciphertext = encrypted_flow_data[:-16]
-
-    decryptor = Cipher(algorithms.AES(aes_key), modes.GCM(flipped_iv, tag), backend=default_backend()).decryptor()
-    decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-    return json.loads(decrypted), aes_key, initial_vector
+    return json.loads(decrypted), aes_key, flipped_iv
 
 def encrypt_response(response_data, aes_key, initial_vector):
     response_bytes = json.dumps(response_data).encode("utf-8")
