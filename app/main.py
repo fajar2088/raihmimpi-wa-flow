@@ -33,7 +33,7 @@ def get_private_key_pem():
         pem = b64.b64decode(key_b64).decode()
     else:
         pem = FLOW_PRIVATE_KEY_PEM.replace("\\n", "\n")
-    return serialization.load_pem_private_key(pem.encode(), password=None, backend=default_backend())
+    return pem
 
 def decrypt_request(body):
     decrypted, aes_key, iv = default_flow_request_decryptor(
