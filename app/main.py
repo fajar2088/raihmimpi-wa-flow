@@ -1,353 +1,380 @@
 import os
 import json
-import logging
 import requests
-from datetime import datetime
-from flask import Flask, request, jsonify
+import schedule
+import time
+from datetime import datetime, timedelta
+from anthropic import Anthropic
 
-app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ============================================================
+# KONFIGURASI - ambil dari environment variables
+# ============================================================
+META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN")
+AD_ACCOUNT_ID = os.environ.get("AD_ACCOUNT_ID", "act_348374300397771")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
-# ─── ENV VARIABLES ───────────────────────────────────────────────
-MIDTRANS_SERVER_KEY = os.environ.get("MIDTRANS_SERVER_KEY", "")
-MIDTRANS_IS_PRODUCTION = os.environ.get("MIDTRANS_IS_PRODUCTION", "false").lower() == "true"
-WA_PHONE_NUMBER_ID = os.environ.get("WA_PHONE_NUMBER_ID", "")
-WA_ACCESS_TOKEN = os.environ.get("WA_ACCESS_TOKEN", "")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+anthropic = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-MIDTRANS_BASE_URL = (
-    "https://app.midtrans.com/snap/v1/transactions"
-    if MIDTRANS_IS_PRODUCTION
-    else "https://app.sandbox.midtrans.com/snap/v1/transactions"
-)
+# ============================================================
+# THRESHOLD SCALING
+# ============================================================
+ROAS_SCALE_UP = 3.0      # ROAS >= 3x → scale up 20%
+ROAS_HOLD_MIN = 2.0      # ROAS 2x-3x → hold
+ROAS_PAUSE_DAYS = 3      # ROAS < 2x selama 3 hari → pause
+SCALE_UP_PERCENT = 0.20  # Naik 20%
+MAX_BUDGET_DAILY = 500000  # Maksimum budget harian (Rp 500.000)
 
-RAIHMIMPI_API = "https://api.raihmimpi.id/campaign"
-
-# ─── AMBIL DATA KAMPANYE ─────────────────────────────────────────
+# ============================================================
+# STEP 1: AMBIL DATA ROAS DARI META ADS API
+# ============================================================
 def get_campaigns():
-    """Ambil daftar kampanye aktif dari API Raihmimpi"""
-    try:
-        resp = requests.get(RAIHMIMPI_API, timeout=10)
-        resp.raise_for_status()
-        campaigns = resp.json()
-        return campaigns
-    except Exception as e:
-        logger.error(f"Error ambil kampanye: {e}")
+    """Ambil semua campaign aktif dari Meta Ads API"""
+    url = f"https://graph.facebook.com/v19.0/{AD_ACCOUNT_ID}/campaigns"
+    params = {
+        "access_token": META_ACCESS_TOKEN,
+        "fields": "id,name,status,daily_budget,lifetime_budget",
+        "filtering": '[{"field":"effective_status","operator":"IN","value":["ACTIVE"]}]',
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    
+    if "error" in data:
+        print(f"[ERROR] Gagal ambil campaigns: {data['error']['message']}")
         return []
+    
+    return data.get("data", [])
 
-def format_rupiah(amount):
-    """Format angka jadi Rp xxx.xxx.xxx"""
+
+def get_campaign_roas(campaign_id, days=7):
+    """Ambil data ROAS campaign untuk N hari terakhir"""
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    
+    url = f"https://graph.facebook.com/v19.0/{campaign_id}/insights"
+    params = {
+        "access_token": META_ACCESS_TOKEN,
+        "fields": "campaign_name,spend,purchase_roas,actions,action_values",
+        "time_range": json.dumps({"since": start_date, "until": end_date}),
+        "level": "campaign",
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    
+    if "error" in data:
+        print(f"[ERROR] Gagal ambil insights campaign {campaign_id}: {data['error']['message']}")
+        return None
+    
+    results = data.get("data", [])
+    if not results:
+        return None
+    
+    insight = results[0]
+    
+    # Ambil ROAS dari purchase_roas
+    roas_value = 0
+    purchase_roas = insight.get("purchase_roas", [])
+    if purchase_roas:
+        roas_value = float(purchase_roas[0].get("value", 0))
+    
+    # Ambil total donasi (action_values)
+    total_donation = 0
+    action_values = insight.get("action_values", [])
+    for av in action_values:
+        if av.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+            total_donation = float(av.get("value", 0))
+    
+    # Ambil jumlah donatur
+    total_donors = 0
+    actions = insight.get("actions", [])
+    for action in actions:
+        if action.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+            total_donors = int(action.get("value", 0))
+    
+    return {
+        "campaign_id": campaign_id,
+        "campaign_name": insight.get("campaign_name", ""),
+        "spend": float(insight.get("spend", 0)),
+        "roas_7d": roas_value,
+        "total_donation": total_donation,
+        "total_donors": total_donors,
+        "date_range": f"{start_date} s/d {end_date}",
+    }
+
+
+def get_campaign_roas_3d(campaign_id):
+    """Ambil ROAS 3 hari terakhir untuk deteksi trend"""
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+    
+    url = f"https://graph.facebook.com/v19.0/{campaign_id}/insights"
+    params = {
+        "access_token": META_ACCESS_TOKEN,
+        "fields": "purchase_roas,spend",
+        "time_range": json.dumps({"since": start_date, "until": end_date}),
+        "level": "campaign",
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    results = data.get("data", [])
+    
+    if not results:
+        return 0
+    
+    purchase_roas = results[0].get("purchase_roas", [])
+    if purchase_roas:
+        return float(purchase_roas[0].get("value", 0))
+    return 0
+
+
+# ============================================================
+# STEP 2: ANALISIS DENGAN CLAUDE AI
+# ============================================================
+def analyze_with_claude(campaigns_data):
+    """Kirim data ke Claude untuk analisis dan rekomendasi scaling"""
+    
+    campaigns_text = ""
+    for c in campaigns_data:
+        campaigns_text += f"""
+Campaign: {c['campaign_name']} (ID: {c['campaign_id']})
+- Budget harian saat ini: Rp {c.get('daily_budget', 0):,.0f}
+- Total spend 7 hari: Rp {c['spend'] * 15000:,.0f} (≈ USD {c['spend']:.2f})
+- ROAS 7 hari: {c['roas_7d']:.2f}x
+- ROAS 3 hari: {c['roas_3d']:.2f}x
+- Total donasi masuk: Rp {c['total_donation'] * 15000:,.0f}
+- Jumlah donatur: {c['total_donors']} orang
+- Periode: {c['date_range']}
+"""
+
+    prompt = f"""Kamu adalah analis iklan digital untuk lembaga crowdfunding sosial Raihmimpi.id yang fokus pada penggalangan donasi.
+
+Berikut data performa campaign Meta Ads hari ini:
+{campaigns_text}
+
+Aturan scaling yang berlaku:
+- ROAS >= 3.0x → SCALE UP budget 20% (maksimal Rp {MAX_BUDGET_DAILY:,.0f}/hari)
+- ROAS 2.0x - 2.9x → HOLD (tidak diubah)
+- ROAS < 2.0x selama 3 hari berturut-turut → PAUSE campaign
+- Jika ROAS 3 hari lebih tinggi dari 7 hari → trending positif, pertimbangkan scale up meski ROAS 7 hari belum 3x
+
+Untuk setiap campaign, berikan:
+1. KEPUTUSAN: SCALE_UP / HOLD / PAUSE
+2. ALASAN: singkat dan jelas
+3. BUDGET_BARU: nominal budget harian baru dalam Rupiah (jika SCALE_UP)
+4. CATATAN: insight tambahan jika ada
+
+Format respons dalam JSON seperti ini:
+{{
+  "analisis_tanggal": "{datetime.now().strftime('%Y-%m-%d')}",
+  "campaigns": [
+    {{
+      "campaign_id": "xxx",
+      "campaign_name": "xxx",
+      "keputusan": "SCALE_UP/HOLD/PAUSE",
+      "alasan": "...",
+      "budget_lama": 0,
+      "budget_baru": 0,
+      "catatan": "..."
+    }}
+  ],
+  "ringkasan": "ringkasan singkat kondisi keseluruhan campaign Raihmimpi hari ini"
+}}"""
+
+    response = anthropic.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    raw = response.content[0].text
+    # Bersihkan markdown jika ada
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    
     try:
-        return f"Rp {int(amount):,}".replace(",", ".")
+        return json.loads(clean)
     except:
-        return str(amount)
+        print(f"[ERROR] Gagal parse JSON dari Claude: {raw}")
+        return None
 
-def format_campaigns_for_flow(campaigns, limit=10):
-    """Format kampanye untuk data-source WhatsApp Flow RadioButtonsGroup"""
-    result = []
-    for c in campaigns[:limit]:
-        campaign_id = str(c.get("ID_CAMPAIGN", ""))
-        name = c.get("CAMPAIGN_NAME", "")[:72]  # max 72 chars
-        target = format_rupiah(c.get("TARGET_DONASI_UANG", 0))
-        terkumpul = format_rupiah(c.get("TOTAL_DONASI", 0))
-        mitra = c.get("NAMA_LENGKAP", "")
-        description = f"Terkumpul: {terkumpul} dari {target}"[:72]
-        result.append({
-            "id": campaign_id,
-            "title": name,
-            "description": description
-        })
-    return result
 
-# ─── MIDTRANS ────────────────────────────────────────────────────
-def create_midtrans_payment(order_id, amount, donatur_name, phone, campaign_name):
-    import base64
-    auth = base64.b64encode(f"{MIDTRANS_SERVER_KEY}:".encode()).decode()
-    payload = {
-        "transaction_details": {
-            "order_id": order_id,
-            "gross_amount": int(amount)
-        },
-        "customer_details": {
-            "first_name": donatur_name,
-            "phone": phone
-        },
-        "item_details": [{
-            "id": "DONASI-001",
-            "price": int(amount),
-            "quantity": 1,
-            "name": f"Donasi: {campaign_name[:50]}"
-        }],
-        "callbacks": {
-            "finish": f"https://raihmimpi.id/donasi-sukses?order_id={order_id}"
-        }
+# ============================================================
+# STEP 3: EKSEKUSI PERUBAHAN BUDGET KE META
+# ============================================================
+def update_campaign_budget(campaign_id, new_budget_idr):
+    """Update budget campaign di Meta Ads API"""
+    # Konversi IDR ke unit Meta (dalam sen USD, tapi Meta pakai currency akun)
+    # Meta menyimpan budget dalam currency terkecil (sen/rupiah)
+    new_budget_meta = int(new_budget_idr * 100)  # dalam sen Rupiah
+    
+    url = f"https://graph.facebook.com/v19.0/{campaign_id}"
+    params = {
+        "access_token": META_ACCESS_TOKEN,
+        "daily_budget": new_budget_meta,
     }
-    resp = requests.post(
-        MIDTRANS_BASE_URL,
-        json=payload,
-        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
-        timeout=15
-    )
-    resp.raise_for_status()
-    return resp.json().get("redirect_url")
+    response = requests.post(url, params=params)
+    data = response.json()
+    
+    if data.get("success"):
+        print(f"[OK] Budget campaign {campaign_id} diupdate ke Rp {new_budget_idr:,.0f}")
+        return True
+    else:
+        print(f"[ERROR] Gagal update budget: {data}")
+        return False
 
-# ─── WA CLOUD API ────────────────────────────────────────────────
-def send_wa_message(to_phone, message):
-    url = f"https://graph.facebook.com/v19.0/{WA_PHONE_NUMBER_ID}/messages"
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to_phone,
-        "type": "text",
-        "text": {"body": message}
+
+def pause_campaign(campaign_id):
+    """Pause campaign di Meta Ads"""
+    url = f"https://graph.facebook.com/v19.0/{campaign_id}"
+    params = {
+        "access_token": META_ACCESS_TOKEN,
+        "status": "PAUSED",
     }
-    resp = requests.post(
-        url,
-        json=payload,
-        headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
-        timeout=10
-    )
-    logger.info(f"WA send: {resp.status_code}")
-
-# ─── TELEGRAM ────────────────────────────────────────────────────
-def notify_telegram(text):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    requests.post(url, json={
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML"
-    }, timeout=10)
-
-# ─── SIMPAN TRANSAKSI ────────────────────────────────────────────
-DATA_FILE = "/app/data/transaksi.json"
-
-def load_data():
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    if not os.path.exists(DATA_FILE):
-        return []
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
-
-def save_data(data):
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-# ─── ENDPOINT: WA FLOW (DENGAN ENDPOINT) ─────────────────────────
-@app.route("/wa-flow", methods=["POST"])
-def wa_flow_endpoint():
-    """
-    Endpoint utama WhatsApp Flow.
-    Meta memanggil endpoint ini di setiap perpindahan screen.
-    Request berisi: action, screen, data dari user
-    """
-    try:
-        body = request.get_json()
-        logger.info(f"WA Flow request: {json.dumps(body)}")
-
-        action = body.get("action")
-        screen = body.get("screen")
-        data = body.get("data", {})
-        flow_token = body.get("flow_token", "")
-
-        # ── INIT: screen pertama dibuka ──────────────────────────
-        if action == "INIT":
-            campaigns = get_campaigns()
-            kampanye_list = format_campaigns_for_flow(campaigns, limit=10)
-
-            return jsonify({
-                "screen": "PILIH_TIPE",
-                "data": {
-                    "kampanye_list": kampanye_list
-                }
-            })
-
-        # ── NAVIGATE: user pindah screen ────────────────────────
-        if action == "data_exchange":
-
-            # Screen: setelah pilih tipe → load kampanye
-            if screen == "PILIH_KAMPANYE":
-                campaigns = get_campaigns()
-                kampanye_list = format_campaigns_for_flow(campaigns, limit=10)
-                return jsonify({
-                    "screen": "PILIH_KAMPANYE",
-                    "data": {
-                        "kampanye_list": kampanye_list,
-                        "tipe_donasi": data.get("tipe_donasi", "sekali")
-                    }
-                })
-
-            # Screen: konfirmasi → buat payment link
-            if screen == "SELESAI":
-                nama_donatur = data.get("nama_donatur", "Donatur")
-                kampanye_id = data.get("kampanye_id", "")
-                kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
-                nominal = data.get("nominal", 50000)
-                nominal_lain = data.get("nominal_lain", 0)
-                atas_nama = data.get("atas_nama", nama_donatur)
-                tipe = data.get("tipe_donasi", "sekali")
-
-                # Pakai nominal_lain kalau ada
-                final_nominal = int(nominal_lain) if nominal_lain and int(nominal_lain) > 0 else int(nominal)
-
-                # Ambil nomor HP dari flow_token
-                phone = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
-
-                # Buat order ID
-                order_id = f"RM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{kampanye_id[-4:]}"
-
-                # Buat Midtrans link
-                payment_url = create_midtrans_payment(
-                    order_id, final_nominal, nama_donatur, phone, kampanye_nama
-                )
-
-                # Simpan transaksi
-                transaksi = load_data()
-                transaksi.append({
-                    "order_id": order_id,
-                    "donatur": nama_donatur,
-                    "atas_nama": atas_nama,
-                    "phone": phone,
-                    "kampanye_id": kampanye_id,
-                    "kampanye": kampanye_nama,
-                    "nominal": final_nominal,
-                    "tipe": tipe,
-                    "status": "pending",
-                    "payment_url": payment_url,
-                    "created_at": datetime.now().isoformat()
-                })
-                save_data(transaksi)
-
-                # Kirim link ke donatur
-                if phone:
-                    pesan = (
-                        f"Assalamu'alaikum *{nama_donatur}*! 🤲\n\n"
-                        f"Terima kasih sudah berniat berdonasi untuk:\n"
-                        f"*{kampanye_nama}*\n\n"
-                        f"Nominal: *{format_rupiah(final_nominal)}*\n"
-                        f"Atas nama: *{atas_nama}*\n"
-                        f"Tipe: *Donasi {tipe.capitalize()}*\n\n"
-                        f"Silakan selesaikan donasi melalui:\n"
-                        f"{payment_url}\n\n"
-                        f"_Link berlaku 24 jam. Semoga menjadi amal jariyah yang berkah._ 🙏"
-                    )
-                    send_wa_message(phone, pesan)
-
-                # Notif Telegram
-                notify_telegram(
-                    f"🔔 <b>Donasi Baru!</b>\n"
-                    f"👤 {nama_donatur} ({phone})\n"
-                    f"📋 {kampanye_nama}\n"
-                    f"💰 {format_rupiah(final_nominal)}\n"
-                    f"🔄 {tipe.capitalize()}\n"
-                    f"🆔 {order_id}\n"
-                    f"⏳ Menunggu pembayaran"
-                )
-
-                return jsonify({
-                    "screen": "SUCCESS",
-                    "data": {
-                        "payment_url": payment_url,
-                        "order_id": order_id,
-                        "extension_message_response": {
-                            "params": {
-                                "flow_token": flow_token
-                            }
-                        }
-                    }
-                })
-
-        return jsonify({"screen": "PILIH_TIPE", "data": {}})
-
-    except Exception as e:
-        logger.error(f"Error wa-flow: {e}", exc_info=True)
-        return jsonify({
-            "screen": "ERROR",
-            "data": {"error_message": "Terjadi kesalahan, silakan coba lagi."}
-        }), 500
+    response = requests.post(url, params=params)
+    data = response.json()
+    
+    if data.get("success"):
+        print(f"[OK] Campaign {campaign_id} di-PAUSE")
+        return True
+    else:
+        print(f"[ERROR] Gagal pause campaign: {data}")
+        return False
 
 
-# ─── ENDPOINT: MIDTRANS CALLBACK ─────────────────────────────────
-@app.route("/midtrans-callback", methods=["POST"])
-def midtrans_callback():
-    try:
-        data = request.get_json()
-        order_id = data.get("order_id")
-        status = data.get("transaction_status")
-        fraud = data.get("fraud_status", "accept")
-
-        logger.info(f"Midtrans callback: {order_id} → {status}")
-
-        if status in ("capture", "settlement") and fraud == "accept":
-            final_status = "lunas"
-        elif status in ("cancel", "deny", "expire"):
-            final_status = "gagal"
-        else:
-            final_status = status
-
-        transaksi = load_data()
-        donatur, kampanye, nominal, phone = "", "", 0, ""
-        for t in transaksi:
-            if t["order_id"] == order_id:
-                t["status"] = final_status
-                t["paid_at"] = datetime.now().isoformat()
-                donatur = t.get("donatur", "")
-                kampanye = t.get("kampanye", "")
-                nominal = t.get("nominal", 0)
-                phone = t.get("phone", "")
-                break
-        save_data(transaksi)
-
-        if final_status == "lunas" and phone:
-            send_wa_message(phone, (
-                f"✅ *Donasi Berhasil!*\n\n"
-                f"Alhamdulillah, donasi Anda telah diterima.\n\n"
-                f"📋 *{kampanye}*\n"
-                f"💰 {format_rupiah(nominal)}\n"
-                f"🆔 {order_id}\n\n"
-                f"Semoga Allah melipatgandakan kebaikan Anda. 🤲\n"
-                f"_Raihmimpi.id_"
-            ))
-            notify_telegram(
-                f"✅ <b>LUNAS!</b>\n"
-                f"👤 {donatur} ({phone})\n"
-                f"📋 {kampanye}\n"
-                f"💰 {format_rupiah(nominal)}\n"
-                f"🆔 {order_id}"
-            )
-
-        return jsonify({"status": "ok"})
-
-    except Exception as e:
-        logger.error(f"Error midtrans-callback: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+# ============================================================
+# STEP 4: SIMPAN LOG
+# ============================================================
+def save_log(analysis_result, execution_results):
+    """Simpan log ke file JSON"""
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "analysis": analysis_result,
+        "execution": execution_results,
+    }
+    
+    log_file = "scaling_log.json"
+    logs = []
+    
+    if os.path.exists(log_file):
+        with open(log_file, "r") as f:
+            try:
+                logs = json.load(f)
+            except:
+                logs = []
+    
+    logs.append(log_entry)
+    
+    # Simpan hanya 90 hari terakhir
+    if len(logs) > 90:
+        logs = logs[-90:]
+    
+    with open(log_file, "w") as f:
+        json.dump(logs, f, indent=2, ensure_ascii=False)
+    
+    print(f"[LOG] Disimpan ke {log_file}")
 
 
-# ─── ENDPOINT: LIST KAMPANYE (untuk debug) ───────────────────────
-@app.route("/kampanye", methods=["GET"])
-def list_kampanye():
-    """Endpoint debug untuk cek data kampanye dari API Raihmimpi"""
+# ============================================================
+# MAIN: JALANKAN SISTEM SCALING
+# ============================================================
+def run_scaling():
+    print(f"\n{'='*60}")
+    print(f"[START] Raihmimpi AI Scaling - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"{'='*60}")
+    
+    # Step 1: Ambil data campaigns
+    print("\n[1] Mengambil data campaigns dari Meta Ads API...")
     campaigns = get_campaigns()
-    formatted = format_campaigns_for_flow(campaigns)
-    return jsonify({
-        "total": len(campaigns),
-        "formatted": formatted
-    })
+    
+    if not campaigns:
+        print("[STOP] Tidak ada campaign aktif ditemukan.")
+        return
+    
+    print(f"[OK] Ditemukan {len(campaigns)} campaign aktif")
+    
+    # Step 2: Ambil data ROAS per campaign
+    print("\n[2] Mengambil data ROAS...")
+    campaigns_data = []
+    for campaign in campaigns:
+        campaign_id = campaign["id"]
+        roas_data = get_campaign_roas(campaign_id, days=7)
+        
+        if roas_data:
+            roas_data["roas_3d"] = get_campaign_roas_3d(campaign_id)
+            
+            # Ambil budget harian
+            daily_budget = campaign.get("daily_budget", 0)
+            roas_data["daily_budget"] = int(daily_budget) / 100 if daily_budget else 0
+            
+            campaigns_data.append(roas_data)
+            print(f"  - {roas_data['campaign_name']}: ROAS {roas_data['roas_7d']:.2f}x (7d), {roas_data['roas_3d']:.2f}x (3d)")
+    
+    if not campaigns_data:
+        print("[STOP] Tidak ada data ROAS tersedia.")
+        return
+    
+    # Step 3: Analisis dengan Claude
+    print("\n[3] Menganalisis dengan Claude AI...")
+    analysis = analyze_with_claude(campaigns_data)
+    
+    if not analysis:
+        print("[STOP] Gagal mendapat analisis dari Claude.")
+        return
+    
+    print(f"\n[RINGKASAN CLAUDE] {analysis.get('ringkasan', '')}")
+    
+    # Step 4: Eksekusi keputusan
+    print("\n[4] Mengeksekusi keputusan scaling...")
+    execution_results = []
+    
+    for rec in analysis.get("campaigns", []):
+        campaign_id = rec["campaign_id"]
+        keputusan = rec["keputusan"]
+        
+        print(f"\n  Campaign: {rec['campaign_name']}")
+        print(f"  Keputusan: {keputusan}")
+        print(f"  Alasan: {rec['alasan']}")
+        
+        result = {"campaign_id": campaign_id, "keputusan": keputusan, "success": False}
+        
+        if keputusan == "SCALE_UP":
+            budget_baru = rec.get("budget_baru", 0)
+            if budget_baru > 0:
+                success = update_campaign_budget(campaign_id, budget_baru)
+                result["budget_baru"] = budget_baru
+                result["success"] = success
+                print(f"  Budget baru: Rp {budget_baru:,.0f}")
+        
+        elif keputusan == "PAUSE":
+            success = pause_campaign(campaign_id)
+            result["success"] = success
+        
+        elif keputusan == "HOLD":
+            print(f"  Tidak ada perubahan budget.")
+            result["success"] = True
+        
+        execution_results.append(result)
+    
+    # Step 5: Simpan log
+    print("\n[5] Menyimpan log...")
+    save_log(analysis, execution_results)
+    
+    print(f"\n{'='*60}")
+    print(f"[SELESAI] Scaling selesai dijalankan!")
+    print(f"{'='*60}\n")
 
 
-# ─── HEALTH CHECK ────────────────────────────────────────────────
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "ok",
-        "service": "Raihmimpi WA Flow Backend",
-        "version": "2.0.0"
-    })
-
-
+# ============================================================
+# SCHEDULER - Jalankan setiap hari jam 23.00 WIB (16.00 UTC)
+# ============================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    print("🚀 Raihmimpi AI Scaling System aktif...")
+    print("⏰ Dijadwalkan setiap hari jam 23.00 WIB")
+    
+    # Jalankan sekali saat startup untuk testing
+    run_scaling()
+    
+    # Schedule harian jam 16:00 UTC = 23:00 WIB
+    schedule.every().day.at("16:00").do(run_scaling)
+    
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
