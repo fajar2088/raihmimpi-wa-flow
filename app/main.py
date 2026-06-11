@@ -30,7 +30,12 @@ MIDTRANS_BASE_URL = (
 RAIHMIMPI_API = "https://api.raihmimpi.id/campaign"
 
 def get_private_key():
-    pem = FLOW_PRIVATE_KEY_PEM.replace("\\n", "\n")
+    import base64 as b64
+    key_b64 = os.environ.get("FLOW_PRIVATE_KEY_B64", "")
+    if key_b64:
+        pem = b64.b64decode(key_b64).decode()
+    else:
+        pem = FLOW_PRIVATE_KEY_PEM.replace("\\n", "\n")
     return serialization.load_pem_private_key(pem.encode(), password=None, backend=default_backend())
 
 def decrypt_request(body):
