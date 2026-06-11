@@ -141,7 +141,7 @@ def handle_flow_request(decrypted_body):
     logger.info(f"Flow action={action} screen={screen}")
 
     if action == "ping":
-        return {"data": {"status": "active"}}
+        return {"version": "3.0", "data": {"status": "active"}}
 
     if action == "INIT":
         campaigns = get_campaigns()
