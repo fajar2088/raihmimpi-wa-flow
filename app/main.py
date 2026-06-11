@@ -26,7 +26,7 @@ MIDTRANS_BASE_URL = (
 )
 RAIHMIMPI_API = "https://api.raihmimpi.id/campaign"
 
-def get_private_key():
+def get_private_key_pem():
     import base64 as b64
     key_b64 = os.environ.get("FLOW_PRIVATE_KEY_B64", "")
     if key_b64:
