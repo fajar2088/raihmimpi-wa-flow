@@ -176,6 +176,7 @@ def handle_flow_request(decrypted_body):
 def wa_flow_endpoint():
     try:
         body = request.get_json()
+        logger.info(f"RAW BODY KEYS: {list(body.keys()) if body else 'None'}")
         if "encrypted_aes_key" in body:
             decrypted_body, aes_key, iv = decrypt_request(body)
             response_data = handle_flow_request(decrypted_body)
