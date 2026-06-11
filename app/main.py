@@ -5,10 +5,7 @@ import logging
 import requests
 from datetime import datetime
 from flask import Flask, request, jsonify, Response
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.backends import default_backend
+from pywa.utils import default_flow_request_decryptor, default_flow_response_encryptor
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -39,36 +36,16 @@ def get_private_key():
     return serialization.load_pem_private_key(pem.encode(), password=None, backend=default_backend())
 
 def decrypt_request(body):
-    encrypted_aes_key = base64.b64decode(body["encrypted_aes_key"])
-    encrypted_flow_data = base64.b64decode(body["encrypted_flow_data"])
-    initial_vector = base64.b64decode(body["initial_vector"])
-
-    private_key = get_private_key()
-    aes_key = private_key.decrypt(
-        encrypted_aes_key,
-        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+    decrypted, aes_key, iv = default_flow_request_decryptor(
+        body["encrypted_flow_data"],
+        body["encrypted_aes_key"],
+        body["initial_vector"],
+        get_private_key_pem()
     )
+    return decrypted, aes_key, iv
 
-    # Untuk dekripsi: gunakan IV asli
-    tag = encrypted_flow_data[-16:]
-    ciphertext = encrypted_flow_data[:-16]
-
-    decryptor = Cipher(algorithms.AES(aes_key), modes.GCM(initial_vector, tag), backend=default_backend()).decryptor()
-    decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-
-    # Untuk enkripsi response: gunakan flipped IV
-    iv_bytes = bytearray(initial_vector)
-    iv_bytes[-1] ^= 0xFF
-    flipped_iv = bytes(iv_bytes)
-
-    return json.loads(decrypted), aes_key, flipped_iv
-
-def encrypt_response(response_data, aes_key, flipped_iv):
-    response_bytes = json.dumps(response_data).encode("utf-8")
-    encryptor = Cipher(algorithms.AES(aes_key), modes.GCM(flipped_iv), backend=default_backend()).encryptor()
-    encrypted = encryptor.update(response_bytes) + encryptor.finalize()
-    # Meta mengharapkan tag di depan encrypted data
-    return base64.b64encode(encryptor.tag + encrypted).decode("utf-8")
+def encrypt_response(response_data, aes_key, iv):
+    return default_flow_response_encryptor(response_data, aes_key, iv)
 
 def get_campaigns():
     try:
