@@ -67,7 +67,8 @@ def encrypt_response(response_data, aes_key, flipped_iv):
     response_bytes = json.dumps(response_data).encode("utf-8")
     encryptor = Cipher(algorithms.AES(aes_key), modes.GCM(flipped_iv), backend=default_backend()).encryptor()
     encrypted = encryptor.update(response_bytes) + encryptor.finalize()
-    return base64.b64encode(encrypted + encryptor.tag).decode("utf-8")
+    # Meta mengharapkan tag di depan encrypted data
+    return base64.b64encode(encryptor.tag + encrypted).decode("utf-8")
 
 def get_campaigns():
     try:
