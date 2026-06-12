@@ -502,6 +502,21 @@ def debug_key_fingerprint():
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
+WEBHOOK_VERIFY_TOKEN = os.environ.get("WEBHOOK_VERIFY_TOKEN", "raihmimpi_webhook_2026")
+
+@app.route("/wa-flow", methods=["GET"])
+def wa_flow_verify():
+    """Verifikasi webhook Meta untuk App subscription."""
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    logger.info(f"Webhook verify: mode={mode} token={token} challenge={challenge}")
+    if mode == "subscribe" and token == WEBHOOK_VERIFY_TOKEN:
+        logger.info("Webhook verified successfully")
+        return challenge, 200
+    logger.warning(f"Webhook verify FAILED: token mismatch atau mode salah")
+    return jsonify({"error": "Forbidden"}), 403
+
 @app.route("/wa-flow", methods=["POST"])
 def wa_flow_endpoint():
     try:
