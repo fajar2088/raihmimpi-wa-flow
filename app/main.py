@@ -105,7 +105,7 @@ def format_campaigns_with_images(campaigns, limit=3):
     result = []
     for c in campaigns[:limit]:
         campaign_id = str(c.get("ID_CAMPAIGN", ""))
-        name = c.get("CAMPAIGN_NAME", "")[:72]
+        name = c.get("CAMPAIGN_NAME", "")[:30]
         terkumpul_raw = c.get("TOTAL_DONASI", 0)
         target_raw = c.get("TARGET_DONASI_UANG", 0)
         try:
