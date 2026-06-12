@@ -314,49 +314,45 @@ def halosis_webhook():
         body = request.get_json(silent=True) or {}
         logger.info(f"HALOSIS WEBHOOK RAW BODY: {json.dumps(body)[:2000]}")
 
-        # --- Coba beberapa kemungkinan struktur payload ---
         phone = None
         text = None
 
-        # Kemungkinan 1: mirip WhatsApp Cloud API (entry > changes > value > messages)
-        try:
-            entry = body.get("entry", [])
-            if entry:
-                changes = entry[0].get("changes", [])
-                if changes:
-                    value = changes[0].get("value", {})
+        # Struktur asli Halosis: {"type": "message.received", "data": {"from_phone_number": ..., "message": ...}}
+        if body.get("type") == "message.received":
+            data = body.get("data", {})
+            phone = data.get("from_phone_number")
+            text = data.get("message")
+
+        # Fallback untuk struktur lain (mirip Cloud API / variasi field)
+        if not phone:
+            try:
+                entry = body.get("entry", [])
+                if entry:
+                    value = entry[0]["changes"][0]["value"]
                     messages = value.get("messages", [])
                     if messages:
                         phone = messages[0].get("from")
                         text = messages[0].get("text", {}).get("body")
-        except Exception:
-            pass
+            except Exception:
+                pass
 
-        # Kemungkinan 2: flat structure { "from": "...", "message": "..." } atau variasi nama field
         if not phone:
-            for key in ["from", "phone", "sender", "wa_id", "customer_phone", "number"]:
+            for key in ["from", "phone", "sender", "wa_id", "from_phone_number"]:
                 if body.get(key):
                     phone = body.get(key)
                     break
 
         if not text:
-            for key in ["message", "text", "body", "msg", "content"]:
+            for key in ["message", "text", "body", "msg"]:
                 val = body.get(key)
                 if isinstance(val, str):
                     text = val
                     break
-                if isinstance(val, dict) and val.get("body"):
-                    text = val.get("body")
-                    break
 
-        # Kemungkinan 3: nested di "data"
         if (not phone or not text) and isinstance(body.get("data"), dict):
             data = body["data"]
-            phone = phone or data.get("from") or data.get("phone") or data.get("sender")
-            text_val = data.get("message") or data.get("text") or data.get("body")
-            if isinstance(text_val, dict):
-                text_val = text_val.get("body")
-            text = text or text_val
+            phone = phone or data.get("from_phone_number") or data.get("from") or data.get("phone")
+            text = text or data.get("message") or data.get("text")
 
         logger.info(f"HALOSIS WEBHOOK PARSED: phone={phone} text={text}")
 
