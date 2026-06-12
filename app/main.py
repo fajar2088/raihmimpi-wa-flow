@@ -121,7 +121,7 @@ def format_campaigns_with_images(campaigns, limit=3):
             "id": campaign_id,
             "main-content": {
                 "title": name,
-                "description": f"Terkumpul {terkumpul} ({pct}%)"[:72]
+                "description": f"Terkumpul {pct}%"[:20]
             },
             "start": {
                 "image": image_b64
