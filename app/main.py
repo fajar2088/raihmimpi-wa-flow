@@ -596,6 +596,7 @@ def api_inbox_label(phone):
     return jsonify(contact)
 
 
+@app.route("/api/donasi", methods=["GET"])
 def api_donasi():
     """JSON data semua transaksi donasi, untuk konsumsi dashboard."""
     transaksi = load_data()
@@ -1116,6 +1117,7 @@ setInterval(() => {
     return Response(render_page("chat", "Chat", "Inbox percakapan WhatsApp Raihmimpi", body), mimetype="text/html")
 
 
+@app.route("/kampanye", methods=["GET"])
 def kampanye_page():
     """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
     body = """
