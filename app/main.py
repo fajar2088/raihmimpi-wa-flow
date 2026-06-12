@@ -475,6 +475,33 @@ def handle_flow_request(decrypted_body):
 
     return {"screen": "PILIH_TIPE", "data": {}}
 
+@app.route("/debug-key-fingerprint", methods=["GET"])
+def debug_key_fingerprint():
+    """DEBUG: cek fingerprint private key yang aktif. HAPUS setelah debug selesai."""
+    import hashlib as _h
+    from cryptography.hazmat.primitives import serialization as _ser
+    try:
+        pem = get_private_key_pem()
+        pem_bytes = pem.encode() if isinstance(pem, str) else pem
+        pk = _ser.load_pem_private_key(pem_bytes, password=None)
+        pub_bytes = pk.public_key().public_bytes(
+            encoding=_ser.Encoding.PEM,
+            format=_ser.PublicFormat.SubjectPublicKeyInfo
+        )
+        fp = _h.sha1(pub_bytes).hexdigest()
+        key_b64 = os.environ.get("FLOW_PRIVATE_KEY_B64", "")
+        return jsonify({
+            "fingerprint_current": fp,
+            "fingerprint_expected": "e743de86fb67bd28894a8a8df071aa90692f525a",
+            "match": fp == "e743de86fb67bd28894a8a8df071aa90692f525a",
+            "env_b64_length": len(key_b64),
+            "env_b64_first50": key_b64[:50] if key_b64 else None,
+            "source": "env FLOW_PRIVATE_KEY_B64" if key_b64 else "FLOW_PRIVATE_KEY_PEM constant"
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
 @app.route("/wa-flow", methods=["POST"])
 def wa_flow_endpoint():
     try:
