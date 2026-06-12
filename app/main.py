@@ -231,7 +231,7 @@ def notify_telegram(text):
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
 
-DATA_FILE = "/tmp/transaksi.json"
+DATA_FILE = os.environ.get("DATA_DIR", "/tmp") + "/transaksi.json"
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -450,6 +450,157 @@ def halosis_webhook():
     except Exception as e:
         logger.error(f"Error halosis-webhook: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/donasi", methods=["GET"])
+def api_donasi():
+    """JSON data semua transaksi donasi, untuk konsumsi dashboard."""
+    transaksi = load_data()
+    transaksi_sorted = sorted(transaksi, key=lambda t: t.get("created_at", ""), reverse=True)
+
+    total_nominal_lunas = sum(t.get("nominal", 0) for t in transaksi if t.get("status") == "lunas")
+    total_donasi_lunas = sum(1 for t in transaksi if t.get("status") == "lunas")
+    donatur_set = set(t.get("phone", "") for t in transaksi if t.get("status") == "lunas" and t.get("phone"))
+
+    tipe_count = {}
+    for t in transaksi:
+        if t.get("status") == "lunas":
+            tipe = t.get("tipe", "sekali")
+            tipe_count[tipe] = tipe_count.get(tipe, 0) + 1
+
+    kampanye_count = {}
+    for t in transaksi:
+        if t.get("status") == "lunas":
+            k = t.get("kampanye", "Lainnya")
+            kampanye_count[k] = kampanye_count.get(k, 0) + 1
+    top_kampanye = sorted(kampanye_count.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    return jsonify({
+        "summary": {
+            "total_nominal": total_nominal_lunas,
+            "total_donasi": total_donasi_lunas,
+            "total_donatur": len(donatur_set),
+        },
+        "tipe_donasi": tipe_count,
+        "top_kampanye": [{"nama": k, "jumlah": v} for k, v in top_kampanye],
+        "transaksi": transaksi_sorted[:100],
+    })
+
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    """Dashboard donasi sederhana (mirip Halosis dashboard)."""
+    html = """<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Donasi - Raihmimpi</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  body { background:#f3f4f8; color:#1f2330; padding:24px; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .subtitle { color:#6b7280; margin-bottom:20px; font-size:14px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+  .card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .card .icon { font-size:28px; }
+  .card .value { font-size:28px; font-weight:700; color:#5b3df0; margin:8px 0 4px; }
+  .card .label { color:#6b7280; font-size:14px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } }
+  .panel { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .panel h2 { font-size:16px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #eee; }
+  th { color:#6b7280; font-weight:600; }
+  .badge { padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600; }
+  .badge.lunas { background:#dcfce7; color:#16a34a; }
+  .badge.pending { background:#fef3c7; color:#d97706; }
+  .badge.gagal { background:#fee2e2; color:#dc2626; }
+  .refresh { font-size:12px; color:#9ca3af; margin-top:16px; }
+</style>
+</head>
+<body>
+  <h1>Dashboard Donasi Raihmimpi</h1>
+  <div class="subtitle">via WhatsApp Flow &middot; +62 851-1123-4962</div>
+
+  <div class="cards">
+    <div class="card"><div class="icon">💰</div><div class="value" id="total_nominal">-</div><div class="label">Total Nominal Donasi (Lunas)</div></div>
+    <div class="card"><div class="icon">📋</div><div class="value" id="total_donasi">-</div><div class="label">Total Donasi (Lunas)</div></div>
+    <div class="card"><div class="icon">👥</div><div class="value" id="total_donatur">-</div><div class="label">Total Donatur</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Tipe Donasi</h2>
+      <canvas id="chartTipe" height="220"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Kampanye Terbanyak</h2>
+      <div id="topKampanye"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <h2>Daftar Donasi Terbaru</h2>
+    <table>
+      <thead><tr><th>Waktu</th><th>Donatur</th><th>Kampanye</th><th>Nominal</th><th>Tipe</th><th>Status</th></tr></thead>
+      <tbody id="tabelDonasi"></tbody>
+    </table>
+  </div>
+  <div class="refresh">Auto-refresh setiap 30 detik &middot; <span id="lastUpdate"></span></div>
+
+<script>
+function formatRupiah(n) {
+  return "Rp " + Number(n).toLocaleString("id-ID");
+}
+function formatWaktu(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"});
+}
+let chart;
+async function loadData() {
+  const res = await fetch("/api/donasi");
+  const json = await res.json();
+
+  document.getElementById("total_nominal").textContent = formatRupiah(json.summary.total_nominal);
+  document.getElementById("total_donasi").textContent = json.summary.total_donasi;
+  document.getElementById("total_donatur").textContent = json.summary.total_donatur;
+
+  const tipeLabels = Object.keys(json.tipe_donasi).map(t => t === "sekali" ? "Donasi Sekali" : "Donasi Rutin");
+  const tipeData = Object.values(json.tipe_donasi);
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById("chartTipe"), {
+    type: "pie",
+    data: { labels: tipeLabels.length ? tipeLabels : ["Belum ada data"], datasets: [{ data: tipeData.length ? tipeData : [1], backgroundColor: ["#f97316","#5b3df0","#10b981","#f43f5e"] }] },
+    options: { plugins: { legend: { position: "bottom" } } }
+  });
+
+  const topKampanyeEl = document.getElementById("topKampanye");
+  topKampanyeEl.innerHTML = json.top_kampanye.length
+    ? json.top_kampanye.map(k => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;"><span>${k.nama}</span><strong>${k.jumlah} donasi</strong></div>`).join("")
+    : "<div style='color:#9ca3af'>Belum ada data</div>";
+
+  const tbody = document.getElementById("tabelDonasi");
+  tbody.innerHTML = json.transaksi.map(t => `
+    <tr>
+      <td>${formatWaktu(t.created_at)}</td>
+      <td>${t.donatur || "-"}</td>
+      <td>${t.kampanye || "-"}</td>
+      <td>${formatRupiah(t.nominal || 0)}</td>
+      <td>${t.tipe === "rutin" ? "Rutin" : "Sekali"}</td>
+      <td><span class="badge ${t.status}">${t.status}</span></td>
+    </tr>
+  `).join("") || "<tr><td colspan='6' style='text-align:center;color:#9ca3af'>Belum ada donasi</td></tr>";
+
+  document.getElementById("lastUpdate").textContent = "Update: " + new Date().toLocaleTimeString("id-ID");
+}
+loadData();
+setInterval(loadData, 30000);
+</script>
+</body>
+</html>"""
+    return Response(html, mimetype="text/html")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
