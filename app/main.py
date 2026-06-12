@@ -191,7 +191,7 @@ HALOSIS_EMAIL = os.environ.get("HALOSIS_EMAIL", "")
 HALOSIS_PASSWORD = os.environ.get("HALOSIS_PASSWORD", "")
 HALOSIS_LONG_TOKEN = os.environ.get("HALOSIS_LONG_TOKEN", "")  # cache long-lived token (60 hari)
 HALOSIS_FROM_PHONE = os.environ.get("HALOSIS_FROM_PHONE", "6281316316135")
-HALOSIS_DONASI_FLOW_ID = os.environ.get("HALOSIS_DONASI_FLOW_ID", "")
+HALOSIS_DONASI_FLOW_ID = os.environ.get("HALOSIS_DONASI_FLOW_ID", "") or DONASI_FLOW_ID
 
 def halosis_login():
     """Login email+password -> dapat refresh_token (valid 24 jam)."""
@@ -337,6 +337,25 @@ def list_kampanye():
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "Raihmimpi WA Flow Backend", "version": "3.2.0"})
+
+@app.route("/halosis-test-send", methods=["GET"])
+def halosis_test_send():
+    """Debug: kirim test Flow message via Halosis API ke nomor tertentu.
+    Usage: /halosis-test-send?to=628112344635"""
+    to = request.args.get("to", "")
+    if not to:
+        return jsonify({"error": "param 'to' wajib diisi, contoh: ?to=628112344635"}), 400
+    try:
+        resp = halosis_send_flow_message(to)
+        return jsonify({
+            "to": to,
+            "flow_id_used": HALOSIS_DONASI_FLOW_ID,
+            "halosis_status": resp.status_code,
+            "halosis_body": resp.text[:1000]
+        })
+    except Exception as e:
+        logger.error(f"halosis_test_send error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/halosis-flows", methods=["GET"])
 def halosis_flows():
