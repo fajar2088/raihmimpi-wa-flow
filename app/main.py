@@ -183,6 +183,48 @@ def send_wa_flow_message(to_phone, body_text="Yuk mulai donasi via Raihmimpi ðŸ¤
     logger.info(f"send_wa_flow_message status={resp.status_code} body={resp.text}")
     return resp
 
+# ============================================================
+# Halosis API (alternatif kirim Flow tanpa Graph API langsung)
+# ============================================================
+HALOSIS_API_BASE = "https://api.halosis.id/v1"
+HALOSIS_EMAIL = os.environ.get("HALOSIS_EMAIL", "")
+HALOSIS_PASSWORD = os.environ.get("HALOSIS_PASSWORD", "")
+HALOSIS_LONG_TOKEN = os.environ.get("HALOSIS_LONG_TOKEN", "")  # cache long-lived token (60 hari)
+HALOSIS_FROM_PHONE = os.environ.get("HALOSIS_FROM_PHONE", "6281316316135")
+HALOSIS_DONASI_FLOW_ID = os.environ.get("HALOSIS_DONASI_FLOW_ID", "")
+
+def halosis_login():
+    """Login email+password -> dapat refresh_token (valid 24 jam)."""
+    resp = requests.post(f"{HALOSIS_API_BASE}/login",
+        json={"email": HALOSIS_EMAIL, "password": HALOSIS_PASSWORD}, timeout=15)
+    logger.info(f"halosis_login status={resp.status_code} body={resp.text[:300]}")
+    resp.raise_for_status()
+    return resp.json().get("refresh_token")
+
+def halosis_get_access_token():
+    """refresh_token -> long_lived_token (valid 60 hari)."""
+    refresh_token = halosis_login()
+    resp = requests.post(f"{HALOSIS_API_BASE}/access-token",
+        json={"refresh_token": refresh_token}, timeout=15)
+    logger.info(f"halosis_access_token status={resp.status_code} body={resp.text[:300]}")
+    resp.raise_for_status()
+    return resp.json().get("long_lived_token")
+
+def halosis_send_flow_message(to_phone, message="Yuk mulai donasi via Raihmimpi ðŸ¤²"):
+    """Kirim WhatsApp Flow message via Halosis API (/v1/messages, type=flow)."""
+    token = HALOSIS_LONG_TOKEN or halosis_get_access_token()
+    payload = {
+        "from_phone_number": HALOSIS_FROM_PHONE,
+        "to": to_phone,
+        "type": "flow",
+        "message": message,
+        "flow_id": HALOSIS_DONASI_FLOW_ID
+    }
+    resp = requests.post(f"{HALOSIS_API_BASE}/messages", json=payload,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=15)
+    logger.info(f"halosis_send_flow status={resp.status_code} body={resp.text[:500]}")
+    return resp
+
 def notify_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -296,6 +338,18 @@ def list_kampanye():
 def health():
     return jsonify({"status": "ok", "service": "Raihmimpi WA Flow Backend", "version": "3.2.0"})
 
+@app.route("/halosis-flows", methods=["GET"])
+def halosis_flows():
+    """Debug: list survey flows yang terdaftar di Halosis (cari flow_id donasi)."""
+    try:
+        token = HALOSIS_LONG_TOKEN or halosis_get_access_token()
+        resp = requests.get(f"{HALOSIS_API_BASE}/surveys",
+            headers={"Authorization": f"Bearer {token}"}, timeout=15)
+        return jsonify({"halosis_status": resp.status_code, "halosis_body": resp.json() if resp.ok else resp.text})
+    except Exception as e:
+        logger.error(f"halosis_flows error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/halosis-webhook", methods=["POST", "GET"])
 def halosis_webhook():
     """
@@ -363,8 +417,14 @@ def halosis_webhook():
         if any(kw in text_lower for kw in DONASI_KEYWORDS):
             # Normalisasi nomor (hapus + dan spasi/strip)
             clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-            send_wa_flow_message(clean_phone)
-            return jsonify({"status": "flow_sent", "to": clean_phone}), 200
+            try:
+                resp = halosis_send_flow_message(clean_phone)
+                return jsonify({"status": "flow_sent_via_halosis", "to": clean_phone, "halosis_status": resp.status_code, "halosis_body": resp.text[:300]}), 200
+            except Exception as he:
+                logger.error(f"halosis_send_flow_message failed: {he}", exc_info=True)
+                # fallback ke Graph API langsung
+                send_wa_flow_message(clean_phone)
+                return jsonify({"status": "flow_sent_via_graph_fallback", "to": clean_phone}), 200
 
         return jsonify({"status": "ignored", "reason": "no keyword match"}), 200
 
