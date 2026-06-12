@@ -119,9 +119,13 @@ def format_campaigns_with_images(campaigns, limit=3):
 
         result.append({
             "id": campaign_id,
-            "title": name,
-            "description": f"Terkumpul {terkumpul} ({pct}%)"[:72],
-            "image": image_b64
+            "main-content": {
+                "title": name,
+                "description": f"Terkumpul {terkumpul} ({pct}%)"[:72]
+            },
+            "start": {
+                "image": image_b64
+            }
         })
     return result
 

@@ -30,23 +30,57 @@
               "id": {
                 "type": "string"
               },
-              "title": {
-                "type": "string"
+              "main-content": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
               },
-              "description": {
-                "type": "string"
-              },
-              "image": {
-                "type": "string"
+              "start": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string"
+                  }
+                }
               }
             }
           },
           "__example__": [
             {
-              "id": "1",
-              "title": "Contoh Kampanye",
-              "description": "Terkumpul: Rp 10.000",
-              "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              "id": "5733",
+              "main-content": {
+                "title": "DARURAT, Panti Tunanetra",
+                "description": "Terkumpul Rp 812.414.087 (81%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
+            },
+            {
+              "id": "6246",
+              "main-content": {
+                "title": "Wajah Hancur Digerogoti Tumor",
+                "description": "Terkumpul Rp 222.862.733 (74%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
+            },
+            {
+              "id": "6835",
+              "main-content": {
+                "title": "Bantu Revo Sembuh Wajah Membengkak",
+                "description": "Terkumpul Rp 199.200.995 (66%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
             }
           ]
         }
@@ -115,35 +149,57 @@
               "id": {
                 "type": "string"
               },
-              "title": {
-                "type": "string"
+              "main-content": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
               },
-              "description": {
-                "type": "string"
-              },
-              "image": {
-                "type": "string"
+              "start": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string"
+                  }
+                }
               }
             }
           },
           "__example__": [
             {
               "id": "5733",
-              "title": "DARURAT, Panti Tunanetra",
-              "description": "Terkumpul Rp 812.414.087 (81%)",
-              "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              "main-content": {
+                "title": "DARURAT, Panti Tunanetra",
+                "description": "Terkumpul Rp 812.414.087 (81%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
             },
             {
               "id": "6246",
-              "title": "Wajah Hancur Digerogoti Tumor",
-              "description": "Terkumpul Rp 222.862.733 (74%)",
-              "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              "main-content": {
+                "title": "Wajah Hancur Digerogoti Tumor",
+                "description": "Terkumpul Rp 222.862.733 (74%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
             },
             {
               "id": "6835",
-              "title": "Bantu Revo Sembuh Wajah Membengkak",
-              "description": "Terkumpul Rp 199.200.995 (66%)",
-              "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              "main-content": {
+                "title": "Bantu Revo Sembuh Wajah Membengkak",
+                "description": "Terkumpul Rp 199.200.995 (66%)"
+              },
+              "start": {
+                "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+              }
             }
           ]
         }
@@ -164,7 +220,7 @@
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${item.id}",
-                "kampanye_nama": "${item.title}"
+                "kampanye_nama": "${item.main-content.title}"
               }
             }
           }
