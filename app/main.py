@@ -148,6 +148,41 @@ def send_wa_message(to_phone, message):
     requests.post(url, json={"messaging_product": "whatsapp", "to": to_phone, "type": "text", "text": {"body": message}},
         headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"}, timeout=10)
 
+# ID Flow donasi (didapat dari WhatsApp Manager > Flows)
+DONASI_FLOW_ID = os.environ.get("DONASI_FLOW_ID", "")
+
+# Kata kunci yang men-trigger Flow donasi
+DONASI_KEYWORDS = ["donasi", "infak", "infaq", "sedekah", "zakat", "wakaf", "berdonasi", "donatur"]
+
+def send_wa_flow_message(to_phone, body_text="Yuk mulai donasi via Raihmimpi 🤲", cta_text="Mulai Donasi", screen="PILIH_TIPE"):
+    """Kirim interactive Flow message langsung ke user (dalam window 24 jam, tanpa template)."""
+    url = f"https://graph.facebook.com/v19.0/{WA_PHONE_NUMBER_ID}/messages"
+    flow_token = f"phone_{to_phone}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "interactive",
+        "interactive": {
+            "type": "flow",
+            "body": {"text": body_text},
+            "action": {
+                "name": "flow",
+                "parameters": {
+                    "flow_message_version": "3",
+                    "flow_token": flow_token,
+                    "flow_id": DONASI_FLOW_ID,
+                    "flow_cta": cta_text,
+                    "flow_action": "navigate",
+                    "flow_action_payload": {"screen": screen, "data": {}}
+                }
+            }
+        }
+    }
+    resp = requests.post(url, json=payload,
+        headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}", "Content-Type": "application/json"}, timeout=10)
+    logger.info(f"send_wa_flow_message status={resp.status_code} body={resp.text}")
+    return resp
+
 def notify_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -259,7 +294,87 @@ def list_kampanye():
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "Raihmimpi WA Flow Backend", "version": "3.1.0"})
+    return jsonify({"status": "ok", "service": "Raihmimpi WA Flow Backend", "version": "3.2.0"})
+
+@app.route("/halosis-webhook", methods=["POST", "GET"])
+def halosis_webhook():
+    """
+    Webhook untuk event 'Message Received' dari Halosis.
+    Kalau pesan masuk mengandung keyword donasi, kirim WhatsApp Flow.
+
+    Karena format payload Halosis belum diketahui pasti, fungsi ini
+    mencoba beberapa kemungkinan struktur umum sambil mencatat raw body
+    ke log untuk debugging.
+    """
+    if request.method == "GET":
+        # Beberapa provider melakukan verifikasi webhook via GET
+        return jsonify({"status": "ok"}), 200
+
+    try:
+        body = request.get_json(silent=True) or {}
+        logger.info(f"HALOSIS WEBHOOK RAW BODY: {json.dumps(body)[:2000]}")
+
+        # --- Coba beberapa kemungkinan struktur payload ---
+        phone = None
+        text = None
+
+        # Kemungkinan 1: mirip WhatsApp Cloud API (entry > changes > value > messages)
+        try:
+            entry = body.get("entry", [])
+            if entry:
+                changes = entry[0].get("changes", [])
+                if changes:
+                    value = changes[0].get("value", {})
+                    messages = value.get("messages", [])
+                    if messages:
+                        phone = messages[0].get("from")
+                        text = messages[0].get("text", {}).get("body")
+        except Exception:
+            pass
+
+        # Kemungkinan 2: flat structure { "from": "...", "message": "..." } atau variasi nama field
+        if not phone:
+            for key in ["from", "phone", "sender", "wa_id", "customer_phone", "number"]:
+                if body.get(key):
+                    phone = body.get(key)
+                    break
+
+        if not text:
+            for key in ["message", "text", "body", "msg", "content"]:
+                val = body.get(key)
+                if isinstance(val, str):
+                    text = val
+                    break
+                if isinstance(val, dict) and val.get("body"):
+                    text = val.get("body")
+                    break
+
+        # Kemungkinan 3: nested di "data"
+        if (not phone or not text) and isinstance(body.get("data"), dict):
+            data = body["data"]
+            phone = phone or data.get("from") or data.get("phone") or data.get("sender")
+            text_val = data.get("message") or data.get("text") or data.get("body")
+            if isinstance(text_val, dict):
+                text_val = text_val.get("body")
+            text = text or text_val
+
+        logger.info(f"HALOSIS WEBHOOK PARSED: phone={phone} text={text}")
+
+        if not phone or not text:
+            return jsonify({"status": "ignored", "reason": "phone/text not found", "raw": body}), 200
+
+        text_lower = text.lower()
+        if any(kw in text_lower for kw in DONASI_KEYWORDS):
+            # Normalisasi nomor (hapus + dan spasi/strip)
+            clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+            send_wa_flow_message(clean_phone)
+            return jsonify({"status": "flow_sent", "to": clean_phone}), 200
+
+        return jsonify({"status": "ignored", "reason": "no keyword match"}), 200
+
+    except Exception as e:
+        logger.error(f"Error halosis-webhook: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
