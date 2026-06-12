@@ -322,6 +322,35 @@ def save_inbox(inbox):
     with open(INBOX_FILE, "w") as f:
         json.dump(inbox, f, ensure_ascii=False, indent=2)
 
+# ============================================================
+# Settings (Menu Utama, dll) - sistem sendiri, tidak terhubung Halosis
+# ============================================================
+SETTINGS_FILE = os.environ.get("DATA_DIR", "/tmp") + "/settings.json"
+
+DEFAULT_SETTINGS = {
+    "menu_utama": {
+        "message": "Halo! kak, sekarang kakak bisa donasi via WhatsApp di Raihmimpi.\n\nYuk, coba donasi kak!",
+        "buttons": [
+            {"enabled": True, "label": "Saya mau donasi", "action": "donasi"},
+            {"enabled": True, "label": "Saya mau WA admin", "action": "admin"},
+            {"enabled": False, "label": "Kembali ke Donasi", "action": "donasi"},
+        ],
+    }
+}
+
+def load_settings():
+    if not os.path.exists(SETTINGS_FILE):
+        return DEFAULT_SETTINGS.copy()
+    with open(SETTINGS_FILE, "r") as f:
+        data = json.load(f)
+    merged = DEFAULT_SETTINGS.copy()
+    merged.update(data)
+    return merged
+
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
+
 def record_incoming_message(phone, text, msg_type="text", name=None):
     """Simpan pesan masuk ke inbox, update info kontak (unread, last_message, status)."""
     inbox = load_inbox()
@@ -688,6 +717,47 @@ def api_inbox_label(phone):
     save_inbox(inbox)
     return jsonify(contact)
 
+@app.route("/api/settings/menu-utama", methods=["GET"])
+def api_get_menu_utama():
+    settings = load_settings()
+    return jsonify(settings.get("menu_utama", DEFAULT_SETTINGS["menu_utama"]))
+
+@app.route("/api/settings/menu-utama", methods=["POST"])
+def api_save_menu_utama():
+    body = request.get_json(silent=True) or {}
+    settings = load_settings()
+    settings["menu_utama"] = {
+        "message": body.get("message", ""),
+        "buttons": body.get("buttons", []),
+    }
+    save_settings(settings)
+    return jsonify(settings["menu_utama"])
+
+@app.route("/api/blast", methods=["POST"])
+def api_blast():
+    """Kirim pesan broadcast (WA Blast) ke beberapa kontak via Graph API.
+    Body: {"phones": ["62..."], "message": "..."}"""
+    body = request.get_json(silent=True) or {}
+    phones = body.get("phones", [])
+    message = (body.get("message") or "").strip()
+    if not phones:
+        return jsonify({"error": "phones wajib diisi"}), 400
+    if not message:
+        return jsonify({"error": "message wajib diisi"}), 400
+
+    results = []
+    for phone in phones:
+        try:
+            send_wa_message(phone, message)
+            record_outgoing_message(phone, message, msg_type="text")
+            results.append({"phone": phone, "status": "sent"})
+        except Exception as e:
+            logger.error(f"api_blast error for {phone}: {e}", exc_info=True)
+            results.append({"phone": phone, "status": "error", "error": str(e)})
+
+    sent_count = sum(1 for r in results if r["status"] == "sent")
+    return jsonify({"total": len(phones), "sent": sent_count, "results": results})
+
 
 @app.route("/api/donasi", methods=["GET"])
 def api_donasi():
@@ -797,6 +867,27 @@ LAYOUT_CSS = """
   .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
   .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
   .chat-input-bar button:hover { background:#4c30d9; }
+
+  /* Pengaturan */
+  .settings-tabs { display:flex; gap:10px; margin-bottom:20px; }
+  .settings-tab { padding:10px 20px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#6b7280; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .settings-tab.active { background:#5b3df0; color:#fff; }
+  .settings-section { display:none; }
+  .settings-section.active { display:block; }
+  .form-group { margin-bottom:16px; }
+  .form-group label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151; }
+  .form-group textarea, .form-group input[type=text] { width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+  .form-group textarea { min-height:100px; resize:vertical; }
+  .form-hint { font-size:11px; color:#9ca3af; margin-top:4px; }
+  .button-row { display:flex; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #f3f4f6; }
+  .button-row:last-child { border-bottom:none; }
+  .button-row input[type=text] { flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:13px; }
+  .button-row select { padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:13px; }
+  .save-msg { color:#16a34a; font-size:13px; margin-left:12px; }
+  .blast-contacts { max-height:260px; overflow-y:auto; border:1px solid #eee; border-radius:8px; padding:8px; margin-bottom:12px; }
+  .blast-contact-item { display:flex; align-items:center; gap:10px; padding:8px; border-radius:6px; }
+  .blast-contact-item:hover { background:#f9fafb; }
+  .blast-count { font-size:12px; color:#6b7280; margin-bottom:8px; }
 """
 
 def render_sidebar(active):
@@ -805,6 +896,7 @@ def render_sidebar(active):
         ("pesanan", "/pesanan", "📋", "Pesanan"),
         ("chat", "/chat", "💬", "Chat"),
         ("kampanye", "/kampanye", "🎯", "Kampanye"),
+        ("whatsapp", "/whatsapp", "📱", "WhatsApp"),
     ]
     links = "".join(
         f'<a href="{url}" class="{"active" if key == active else ""}"><span>{icon}</span><span>{label}</span></a>'
@@ -1210,7 +1302,170 @@ setInterval(() => {
     return Response(render_page("chat", "Chat", "Inbox percakapan WhatsApp Raihmimpi", body), mimetype="text/html")
 
 
-@app.route("/kampanye", methods=["GET"])
+@app.route("/whatsapp", methods=["GET"])
+def whatsapp_page():
+    """Halaman Pengaturan: Menu Utama (auto-reply) dan WA Blast - sistem Raihmimpi sendiri."""
+    body = """
+  <div class="settings-tabs">
+    <div class="settings-tab active" data-tab="menu-utama" onclick="setSettingsTab(this)">Menu Utama</div>
+    <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">WA Blast</div>
+  </div>
+
+  <div class="settings-section active" id="section-menu-utama">
+    <div class="panel">
+      <h2>Menu Utama</h2>
+      <p class="form-hint" style="margin-bottom:16px;">Pesan sapaan otomatis beserta tombol aksi yang dikirim ke kontak baru.</p>
+
+      <div class="form-group">
+        <label>Isi Pesan</label>
+        <textarea id="menuMessage" maxlength="1024" placeholder="Halo! kak, ..."></textarea>
+        <div class="form-hint"><span id="menuMessageCount">0</span>/1024</div>
+      </div>
+
+      <div class="form-group">
+        <label>Tombol</label>
+        <div id="menuButtons"></div>
+      </div>
+
+      <button class="btn" onclick="saveMenuUtama()">Simpan</button>
+      <span class="save-msg" id="menuSaveMsg"></span>
+    </div>
+  </div>
+
+  <div class="settings-section" id="section-wa-blast">
+    <div class="panel">
+      <h2>WA Blast</h2>
+      <p class="form-hint" style="margin-bottom:16px;">Kirim pesan broadcast ke kontak yang sudah pernah chat dengan Raihmimpi.</p>
+
+      <div class="form-group">
+        <label>Pilih Kontak</label>
+        <div class="blast-count" id="blastCount">0 kontak dipilih</div>
+        <div class="blast-contacts" id="blastContacts">Memuat kontak...</div>
+        <button class="btn secondary" type="button" onclick="toggleAllBlast()">Pilih/Batal Semua</button>
+      </div>
+
+      <div class="form-group">
+        <label>Isi Pesan</label>
+        <textarea id="blastMessage" placeholder="Tulis pesan broadcast..."></textarea>
+      </div>
+
+      <button class="btn" onclick="sendBlast()">Kirim Blast</button>
+      <span class="save-msg" id="blastSendMsg"></span>
+    </div>
+  </div>
+
+<script>
+function setSettingsTab(el) {
+  document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".settings-section").forEach(s => s.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("section-" + el.dataset.tab).classList.add("active");
+  if (el.dataset.tab === "wa-blast") loadBlastContacts();
+}
+
+// ---- Menu Utama ----
+const ACTION_OPTIONS = [
+  {value: "donasi", label: "Mulai Donasi"},
+  {value: "admin", label: "Hubungi Admin"},
+  {value: "kampanye", label: "Pilih Kampanye"},
+];
+
+function renderButtonRow(btn, idx) {
+  const optsHtml = ACTION_OPTIONS.map(o => `<option value="${o.value}" ${o.value === btn.action ? "selected" : ""}>${o.label}</option>`).join("");
+  return `
+    <div class="button-row">
+      <input type="checkbox" ${btn.enabled ? "checked" : ""} onchange="updateButton(${idx}, 'enabled', this.checked)">
+      <input type="text" value="${(btn.label||"").replace(/"/g,'&quot;')}" placeholder="Label tombol" maxlength="20" oninput="updateButton(${idx}, 'label', this.value)">
+      <select onchange="updateButton(${idx}, 'action', this.value)">${optsHtml}</select>
+    </div>
+  `;
+}
+
+let menuButtons = [];
+function renderMenuButtons() {
+  document.getElementById("menuButtons").innerHTML = menuButtons.map((b, i) => renderButtonRow(b, i)).join("");
+}
+function updateButton(idx, key, value) {
+  menuButtons[idx][key] = value;
+}
+
+async function loadMenuUtama() {
+  const res = await fetch("/api/settings/menu-utama");
+  const data = await res.json();
+  document.getElementById("menuMessage").value = data.message || "";
+  document.getElementById("menuMessageCount").textContent = (data.message || "").length;
+  menuButtons = data.buttons || [];
+  renderMenuButtons();
+}
+document.getElementById("menuMessage").addEventListener("input", function() {
+  document.getElementById("menuMessageCount").textContent = this.value.length;
+});
+
+async function saveMenuUtama() {
+  const message = document.getElementById("menuMessage").value;
+  await fetch("/api/settings/menu-utama", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({message, buttons: menuButtons})
+  });
+  const msg = document.getElementById("menuSaveMsg");
+  msg.textContent = "Tersimpan!";
+  setTimeout(() => msg.textContent = "", 2000);
+}
+
+// ---- WA Blast ----
+let blastContactsData = [];
+async function loadBlastContacts() {
+  const res = await fetch("/api/inbox");
+  const json = await res.json();
+  blastContactsData = json.contacts || [];
+  const el = document.getElementById("blastContacts");
+  if (!blastContactsData.length) {
+    el.innerHTML = "<div style='color:#9ca3af;padding:8px;'>Belum ada kontak</div>";
+    return;
+  }
+  el.innerHTML = blastContactsData.map(c => `
+    <label class="blast-contact-item">
+      <input type="checkbox" value="${c.phone}" onchange="updateBlastCount()">
+      <span>${c.name || c.phone} <span style="color:#9ca3af">(${c.phone})</span></span>
+    </label>
+  `).join("");
+  updateBlastCount();
+}
+function updateBlastCount() {
+  const checked = document.querySelectorAll("#blastContacts input:checked").length;
+  document.getElementById("blastCount").textContent = checked + " kontak dipilih";
+}
+function toggleAllBlast() {
+  const boxes = document.querySelectorAll("#blastContacts input");
+  const allChecked = Array.from(boxes).every(b => b.checked);
+  boxes.forEach(b => b.checked = !allChecked);
+  updateBlastCount();
+}
+async function sendBlast() {
+  const phones = Array.from(document.querySelectorAll("#blastContacts input:checked")).map(b => b.value);
+  const message = document.getElementById("blastMessage").value.trim();
+  const msgEl = document.getElementById("blastSendMsg");
+  if (!phones.length) { msgEl.textContent = "Pilih minimal 1 kontak"; msgEl.style.color = "#dc2626"; return; }
+  if (!message) { msgEl.textContent = "Isi pesan dulu"; msgEl.style.color = "#dc2626"; return; }
+  msgEl.textContent = "Mengirim...";
+  msgEl.style.color = "#6b7280";
+  const res = await fetch("/api/blast", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({phones, message})
+  });
+  const json = await res.json();
+  msgEl.style.color = "#16a34a";
+  msgEl.textContent = `Terkirim ke ${json.sent}/${json.total} kontak`;
+}
+
+loadMenuUtama();
+</script>
+"""
+    return Response(render_page("whatsapp", "WhatsApp", "Menu Utama dan WhatsApp Blast - sistem Raihmimpi", body), mimetype="text/html")
+
+
 def kampanye_page():
     """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
     body = """
