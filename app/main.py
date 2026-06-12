@@ -243,6 +243,75 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# ============================================================
+# Inbox / Percakapan WhatsApp (untuk fitur Inbox mirip Halosis)
+# ============================================================
+INBOX_FILE = os.environ.get("DATA_DIR", "/tmp") + "/inbox.json"
+
+def load_inbox():
+    """Struktur: {"contacts": {phone: {"name":..., "phone":..., "labels":[...], "status":"perlu_dibalas|otomatis|selesai",
+       "last_message":..., "last_message_at":..., "unread": int}}, "messages": {phone: [ {direction, type, text, timestamp} ]}}"""
+    if not os.path.exists(INBOX_FILE):
+        return {"contacts": {}, "messages": {}}
+    with open(INBOX_FILE, "r") as f:
+        return json.load(f)
+
+def save_inbox(inbox):
+    with open(INBOX_FILE, "w") as f:
+        json.dump(inbox, f, ensure_ascii=False, indent=2)
+
+def record_incoming_message(phone, text, msg_type="text", name=None):
+    """Simpan pesan masuk ke inbox, update info kontak (unread, last_message, status)."""
+    inbox = load_inbox()
+    contacts = inbox.setdefault("contacts", {})
+    messages = inbox.setdefault("messages", {})
+
+    contact = contacts.get(phone, {})
+    contact["phone"] = phone
+    if name and not contact.get("name"):
+        contact["name"] = name
+    elif not contact.get("name"):
+        contact["name"] = phone
+    contact.setdefault("labels", [])
+    contact["status"] = "perlu_dibalas"
+    contact["last_message"] = text if msg_type == "text" else f"[{msg_type.upper()}]"
+    contact["last_message_at"] = datetime.now().isoformat()
+    contact["unread"] = contact.get("unread", 0) + 1
+    contacts[phone] = contact
+
+    msg_list = messages.setdefault(phone, [])
+    msg_list.append({
+        "direction": "in",
+        "type": msg_type,
+        "text": text,
+        "timestamp": datetime.now().isoformat(),
+    })
+
+    save_inbox(inbox)
+    return contact
+
+def record_outgoing_message(phone, text, msg_type="text"):
+    """Simpan pesan keluar (balasan admin) ke inbox."""
+    inbox = load_inbox()
+    contacts = inbox.setdefault("contacts", {})
+    messages = inbox.setdefault("messages", {})
+
+    contact = contacts.get(phone, {"phone": phone, "name": phone, "labels": [], "unread": 0})
+    contact["last_message"] = text if msg_type == "text" else f"[{msg_type.upper()}]"
+    contact["last_message_at"] = datetime.now().isoformat()
+    contacts[phone] = contact
+
+    msg_list = messages.setdefault(phone, [])
+    msg_list.append({
+        "direction": "out",
+        "type": msg_type,
+        "text": text,
+        "timestamp": datetime.now().isoformat(),
+    })
+
+    save_inbox(inbox)
+    return contact
+
 def handle_flow_request(decrypted_body):
     action = decrypted_body.get("action")
     screen = decrypted_body.get("screen")
@@ -432,6 +501,18 @@ def halosis_webhook():
         if not phone or not text:
             return jsonify({"status": "ignored", "reason": "phone/text not found", "raw": body}), 200
 
+        # Ambil nama kontak jika tersedia di payload
+        contact_name = None
+        try:
+            data = body.get("data", {})
+            contact_name = data.get("name") or data.get("from_name") or data.get("contact_name")
+        except Exception:
+            pass
+
+        # Simpan SEMUA pesan masuk ke inbox (untuk fitur Inbox/Chat)
+        clean_phone_inbox = phone.replace("+", "").replace(" ", "").replace("-", "")
+        record_incoming_message(clean_phone_inbox, text, msg_type="text", name=contact_name)
+
         text_lower = text.lower()
         if any(kw in text_lower for kw in DONASI_KEYWORDS):
             # Normalisasi nomor (hapus + dan spasi/strip)
@@ -451,7 +532,70 @@ def halosis_webhook():
         logger.error(f"Error halosis-webhook: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/donasi", methods=["GET"])
+@app.route("/api/inbox", methods=["GET"])
+def api_inbox_list():
+    """List semua kontak/percakapan, diurutkan dari pesan terbaru."""
+    inbox = load_inbox()
+    contacts = list(inbox.get("contacts", {}).values())
+    contacts_sorted = sorted(contacts, key=lambda c: c.get("last_message_at", ""), reverse=True)
+    return jsonify({"contacts": contacts_sorted})
+
+@app.route("/api/inbox/<phone>", methods=["GET"])
+def api_inbox_messages(phone):
+    """Ambil semua pesan untuk satu kontak, dan reset unread counter."""
+    inbox = load_inbox()
+    messages = inbox.get("messages", {}).get(phone, [])
+    contact = inbox.get("contacts", {}).get(phone, {"phone": phone, "name": phone, "labels": []})
+
+    # Reset unread saat dibuka
+    if inbox.get("contacts", {}).get(phone, {}).get("unread", 0) > 0:
+        inbox["contacts"][phone]["unread"] = 0
+        save_inbox(inbox)
+
+    return jsonify({"contact": contact, "messages": messages})
+
+@app.route("/api/inbox/<phone>/reply", methods=["POST"])
+def api_inbox_reply(phone):
+    """Kirim balasan teks ke kontak via Halosis API, dan simpan ke inbox."""
+    body = request.get_json(silent=True) or {}
+    text = body.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "text wajib diisi"}), 400
+    try:
+        resp = requests.post(f"{HALOSIS_API_BASE}/messages",
+            json={
+                "from_phone_number": HALOSIS_FROM_PHONE,
+                "to": phone,
+                "type": "text",
+                "message": text,
+            },
+            headers={"Authorization": f"Bearer {HALOSIS_LONG_TOKEN or halosis_get_access_token()}", "Content-Type": "application/json"},
+            timeout=15)
+        record_outgoing_message(phone, text, msg_type="text")
+        return jsonify({"status": "sent", "halosis_status": resp.status_code, "halosis_body": resp.text[:300]})
+    except Exception as e:
+        logger.error(f"api_inbox_reply error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/inbox/<phone>/label", methods=["POST"])
+def api_inbox_label(phone):
+    """Update label dan/atau status kontak."""
+    body = request.get_json(silent=True) or {}
+    inbox = load_inbox()
+    contact = inbox.get("contacts", {}).get(phone)
+    if not contact:
+        return jsonify({"error": "contact not found"}), 404
+    if "labels" in body:
+        contact["labels"] = body["labels"]
+    if "status" in body:
+        contact["status"] = body["status"]
+    if "name" in body:
+        contact["name"] = body["name"]
+    inbox["contacts"][phone] = contact
+    save_inbox(inbox)
+    return jsonify(contact)
+
+
 def api_donasi():
     """JSON data semua transaksi donasi, untuk konsumsi dashboard."""
     transaksi = load_data()
@@ -524,12 +668,48 @@ LAYOUT_CSS = """
   .detail-row { display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #eee; font-size:14px; }
   .detail-row .label { color:#6b7280; }
   .detail-row .val { font-weight:600; text-align:right; }
+
+  /* Chat / Inbox */
+  .chat-wrap { display:flex; height:calc(100vh - 48px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
+  .chat-tabs { display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee; }
+  .chat-tab { flex:1; text-align:center; padding:8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#f3f4f8; color:#6b7280; }
+  .chat-tab.active { background:#5b3df0; color:#fff; }
+  .chat-items { flex:1; overflow-y:auto; }
+  .chat-item { padding:14px 16px; border-bottom:1px solid #f3f4f6; cursor:pointer; display:flex; gap:10px; }
+  .chat-item:hover { background:#f9fafb; }
+  .chat-item.selected { background:#f0edff; }
+  .chat-avatar { width:40px; height:40px; border-radius:50%; background:#e0d9ff; color:#5b3df0; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0; font-size:15px; }
+  .chat-item-body { flex:1; min-width:0; }
+  .chat-item-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .chat-item-name { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chat-item-time { font-size:11px; color:#9ca3af; flex-shrink:0; }
+  .chat-item-preview { font-size:12px; color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .chat-labels { display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; }
+  .chat-label { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; background:#e0e7ff; color:#4338ca; text-transform:uppercase; }
+  .chat-unread { background:#ef4444; color:#fff; font-size:11px; font-weight:700; border-radius:10px; min-width:20px; height:20px; display:flex; align-items:center; justify-content:center; padding:0 6px; }
+  .chat-empty { flex:1; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; flex-direction:column; gap:12px; text-align:center; padding:40px; }
+  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .chat-header { padding:16px 20px; border-bottom:1px solid #eee; display:flex; align-items:center; gap:12px; }
+  .chat-header .chat-avatar { width:36px; height:36px; font-size:13px; }
+  .chat-header-name { font-weight:700; font-size:15px; }
+  .chat-header-phone { font-size:12px; color:#9ca3af; }
+  .chat-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; background:#f9fafb; }
+  .chat-bubble { max-width:60%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.4; }
+  .chat-bubble.in { background:#fff; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  .chat-bubble.out { background:#5b3df0; color:#fff; align-self:flex-end; }
+  .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
+  .chat-input-bar { display:flex; gap:10px; padding:14px 16px; border-top:1px solid #eee; }
+  .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
+  .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
+  .chat-input-bar button:hover { background:#4c30d9; }
 """
 
 def render_sidebar(active):
     items = [
         ("dashboard", "/dashboard", "📊", "Dashboard"),
         ("pesanan", "/pesanan", "📋", "Pesanan"),
+        ("chat", "/chat", "💬", "Chat"),
         ("kampanye", "/kampanye", "🎯", "Kampanye"),
     ]
     links = "".join(
@@ -792,7 +972,150 @@ def pesanan_detail(order_id):
     return Response(render_page("pesanan", "Detail Pesanan", t.get("order_id", order_id), body), mimetype="text/html")
 
 
-@app.route("/kampanye", methods=["GET"])
+@app.route("/chat", methods=["GET"])
+def chat_page():
+    """Halaman Inbox/Chat - list kontak (kiri) + panel percakapan (kanan), mirip Halosis."""
+    body = """
+  <div class="chat-wrap">
+    <div class="chat-list">
+      <div class="chat-tabs">
+        <div class="chat-tab active" data-status="perlu_dibalas" onclick="setTab(this)">Perlu Dibalas</div>
+        <div class="chat-tab" data-status="otomatis" onclick="setTab(this)">Otomatis</div>
+        <div class="chat-tab" data-status="selesai" onclick="setTab(this)">Selesai</div>
+      </div>
+      <div class="chat-items" id="chatItems"></div>
+    </div>
+    <div class="chat-panel" id="chatPanel">
+      <div class="chat-empty">
+        <div style="font-size:40px;">💬</div>
+        <div>Pilih kontak di sebelah kiri<br>untuk memulai percakapan</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let currentTab = "perlu_dibalas";
+let currentPhone = null;
+let allContacts = [];
+
+function initials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(" ");
+  return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+}
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString("id-ID", {hour:"2-digit", minute:"2-digit"});
+  }
+  return d.toLocaleDateString("id-ID", {day:"numeric", month:"short"});
+}
+
+function setTab(el) {
+  document.querySelectorAll(".chat-tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+  currentTab = el.dataset.status;
+  renderItems();
+}
+
+async function loadContacts() {
+  const res = await fetch("/api/inbox");
+  const json = await res.json();
+  allContacts = json.contacts || [];
+  renderItems();
+}
+
+function renderItems() {
+  const filtered = allContacts.filter(c => (c.status || "perlu_dibalas") === currentTab);
+  const el = document.getElementById("chatItems");
+  if (!filtered.length) {
+    el.innerHTML = `<div class="chat-empty">Tidak ada percakapan</div>`;
+    return;
+  }
+  el.innerHTML = filtered.map(c => `
+    <div class="chat-item ${c.phone === currentPhone ? 'selected' : ''}" onclick="openChat('${c.phone}')">
+      <div class="chat-avatar">${initials(c.name)}</div>
+      <div class="chat-item-body">
+        <div class="chat-item-top">
+          <div class="chat-item-name">${c.name || c.phone}</div>
+          <div class="chat-item-time">${formatTime(c.last_message_at)}</div>
+        </div>
+        <div class="chat-item-preview">${(c.last_message || "").replace(/</g,"&lt;")}</div>
+        ${(c.labels && c.labels.length) ? `<div class="chat-labels">${c.labels.map(l => `<span class="chat-label">${l}</span>`).join("")}</div>` : ""}
+      </div>
+      ${c.unread ? `<div class="chat-unread">${c.unread}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+async function openChat(phone) {
+  currentPhone = phone;
+  renderItems();
+  const res = await fetch(`/api/inbox/${phone}`);
+  const json = await res.json();
+  const contact = json.contact;
+  const messages = json.messages || [];
+
+  const panel = document.getElementById("chatPanel");
+  panel.innerHTML = `
+    <div class="chat-header">
+      <div class="chat-avatar">${initials(contact.name)}</div>
+      <div>
+        <div class="chat-header-name">${contact.name || contact.phone}</div>
+        <div class="chat-header-phone">+${contact.phone}</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-bar">
+      <input type="text" id="chatInput" placeholder="Tulis balasan..." onkeydown="if(event.key==='Enter') sendReply()">
+      <button onclick="sendReply()">Kirim</button>
+    </div>
+  `;
+
+  const msgEl = document.getElementById("chatMessages");
+  msgEl.innerHTML = messages.map(m => `
+    <div class="chat-bubble ${m.direction}">
+      <div>${(m.text || "").replace(/</g,"&lt;")}</div>
+      <div class="chat-bubble-time">${formatTime(m.timestamp)}</div>
+    </div>
+  `).join("") || `<div class="chat-empty">Belum ada pesan</div>`;
+  msgEl.scrollTop = msgEl.scrollHeight;
+
+  // refresh list (unread sudah ke-reset di server)
+  loadContacts();
+}
+
+async function sendReply() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text || !currentPhone) return;
+  input.value = "";
+  input.disabled = true;
+  try {
+    await fetch(`/api/inbox/${currentPhone}/reply`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text})
+    });
+    openChat(currentPhone);
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+loadContacts();
+setInterval(() => {
+  loadContacts();
+  if (currentPhone) openChat(currentPhone);
+}, 15000);
+</script>
+"""
+    return Response(render_page("chat", "Chat", "Inbox percakapan WhatsApp Raihmimpi", body), mimetype="text/html")
+
+
 def kampanye_page():
     """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
     body = """
