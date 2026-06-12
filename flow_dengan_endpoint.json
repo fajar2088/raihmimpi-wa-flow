@@ -300,17 +300,13 @@
             "type": "Footer",
             "label": "Isi Data Donatur",
             "on-click-action": {
-              "name": "navigate",
-              "next": {
-                "type": "screen",
-                "name": "DATA_DONATUR"
-              },
+              "name": "data_exchange",
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${data.kampanye_id}",
+                "kampanye_nama": "${data.kampanye_nama}",
                 "nominal": "${form.nominal}",
-                "nominal_lain": "${form.nominal_lain}",
-                "kampanye_nama": "${data.kampanye_nama}"
+                "nominal_lain": "${form.nominal_lain}"
               }
             }
           }

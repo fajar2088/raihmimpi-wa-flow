@@ -1,6 +1,9 @@
 import os
 import json
 import base64
+import hashlib
+import time
+import uuid
 import logging
 import requests
 from io import BytesIO
@@ -20,6 +23,10 @@ WA_ACCESS_TOKEN = os.environ.get("WA_ACCESS_TOKEN", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 FLOW_PRIVATE_KEY_PEM = os.environ.get("FLOW_PRIVATE_KEY", "")
+
+# Meta Pixel / Conversions API (Raihmimpi)
+META_PIXEL_ID = os.environ.get("META_PIXEL_ID", "404823950728687")
+META_PIXEL_ACCESS_TOKEN = os.environ.get("META_PIXEL_ACCESS_TOKEN", "")
 
 MIDTRANS_BASE_URL = (
     "https://app.midtrans.com/snap/v1/transactions"
@@ -231,6 +238,61 @@ def notify_telegram(text):
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
 
+def hash_sha256(value):
+    """Hash nilai (lowercase, trimmed) dengan SHA256 sesuai standar Meta CAPI."""
+    if not value:
+        return None
+    return hashlib.sha256(str(value).strip().lower().encode("utf-8")).hexdigest()
+
+def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_id=None,
+                      content_name=None, content_ids=None, source_url=None):
+    """
+    Kirim event ke Meta Conversions API (Pixel Raihmimpi).
+    - phone: nomor WA donatur (62...), dipakai sebagai 'ph' (hashed) untuk matching.
+    - event_id: untuk deduplikasi jika nanti dikombinasikan dengan Pixel browser-side.
+    - source_url: action_source dianggap 'business_messaging' karena ini dari WhatsApp Flow.
+    """
+    if not META_PIXEL_ACCESS_TOKEN:
+        logger.warning(f"send_pixel_event SKIP (no META_PIXEL_ACCESS_TOKEN): {event_name}")
+        return None
+
+    user_data = {}
+    if phone:
+        # Normalisasi: pastikan format 62xxxxxxxxxx tanpa '+'
+        clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        user_data["ph"] = [hash_sha256(clean)]
+
+    custom_data = {"currency": currency}
+    if value is not None:
+        custom_data["value"] = float(value)
+    if content_name:
+        custom_data["content_name"] = content_name
+    if content_ids:
+        custom_data["content_ids"] = content_ids
+
+    payload = {
+        "data": [{
+            "event_name": event_name,
+            "event_time": int(time.time()),
+            "event_id": event_id or str(uuid.uuid4()),
+            "action_source": "business_messaging",
+            "messaging_channel": "whatsapp",
+            "user_data": user_data,
+            "custom_data": custom_data,
+        }]
+    }
+
+    try:
+        resp = requests.post(
+            f"https://graph.facebook.com/v22.0/{META_PIXEL_ID}/events",
+            params={"access_token": META_PIXEL_ACCESS_TOKEN},
+            json=payload, timeout=10)
+        logger.info(f"send_pixel_event {event_name} status={resp.status_code} body={resp.text[:300]}")
+        return resp
+    except Exception as e:
+        logger.error(f"send_pixel_event {event_name} failed: {e}", exc_info=True)
+        return None
+
 DATA_FILE = os.environ.get("DATA_DIR", "/tmp") + "/transaksi.json"
 
 def load_data():
@@ -325,12 +387,40 @@ def handle_flow_request(decrypted_body):
 
     if action == "INIT":
         campaigns = get_campaigns()
+        phone_init = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
+        send_pixel_event("ViewContent", phone=phone_init, currency="IDR",
+                          content_name="Donasi via WA Raihmimpi")
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
     if action == "data_exchange":
         if screen == "PILIH_KAMPANYE":
             campaigns = get_campaigns()
             return {"screen": "PILIH_KAMPANYE", "data": {"kampanye_list": format_campaigns_with_images(campaigns), "tipe_donasi": data.get("tipe_donasi", "sekali")}}
+
+        if screen == "PILIH_NOMINAL":
+            # User klik "Isi Data Donatur" -> trigger AddToCart, lanjut ke screen DATA_DONATUR
+            kampanye_id = data.get("kampanye_id", "")
+            kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
+            nominal = data.get("nominal", "50000")
+            nominal_lain = data.get("nominal_lain", 0)
+            try:
+                final_nominal = int(nominal_lain) if nominal_lain and int(nominal_lain) > 0 else int(nominal)
+            except (ValueError, TypeError):
+                final_nominal = int(nominal) if str(nominal).isdigit() else 50000
+
+            phone_atc = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
+            send_pixel_event("AddToCart", phone=phone_atc, value=final_nominal, currency="IDR",
+                              event_id=f"atc_{flow_token}_{kampanye_id}",
+                              content_name=kampanye_nama,
+                              content_ids=[kampanye_id] if kampanye_id else None)
+
+            return {"screen": "DATA_DONATUR", "data": {
+                "tipe_donasi": data.get("tipe_donasi", "sekali"),
+                "kampanye_id": kampanye_id,
+                "kampanye_nama": kampanye_nama,
+                "nominal": str(nominal),
+                "nominal_lain": nominal_lain,
+            }}
 
         if screen == "SELESAI":
             nama_donatur = data.get("nama_donatur", "Donatur")
@@ -382,17 +472,20 @@ def midtrans_callback():
         fraud = data.get("fraud_status", "accept")
         final_status = "lunas" if status in ("capture", "settlement") and fraud == "accept" else ("gagal" if status in ("cancel", "deny", "expire") else status)
         transaksi = load_data()
-        donatur, kampanye, nominal, phone = "", "", 0, ""
+        donatur, kampanye, kampanye_id, nominal, phone = "", "", "", 0, ""
         for t in transaksi:
             if t["order_id"] == order_id:
                 t["status"] = final_status
                 t["paid_at"] = datetime.now().isoformat()
-                donatur, kampanye, nominal, phone = t.get("donatur",""), t.get("kampanye",""), t.get("nominal",0), t.get("phone","")
+                donatur, kampanye, kampanye_id, nominal, phone = t.get("donatur",""), t.get("kampanye",""), t.get("kampanye_id",""), t.get("nominal",0), t.get("phone","")
                 break
         save_data(transaksi)
         if final_status == "lunas" and phone:
             send_wa_message(phone, f"✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi Anda diterima.\n\n📋 *{kampanye}*\n💰 {format_rupiah(nominal)}\n🆔 {order_id}\n\nSemoga Allah melipatgandakan kebaikan Anda. 🤲\n_Raihmimpi.id_")
             notify_telegram(f"✅ <b>LUNAS!</b>\n👤 {donatur} ({phone})\n📋 {kampanye}\n💰 {format_rupiah(nominal)}\n🆔 {order_id}")
+            send_pixel_event("Purchase", phone=phone, value=nominal, currency="IDR",
+                              event_id=f"purchase_{order_id}", content_name=kampanye,
+                              content_ids=[kampanye_id] if kampanye_id else None)
         return jsonify({"status": "ok"})
     except Exception as e:
         logger.error(f"Error midtrans-callback: {e}", exc_info=True)
