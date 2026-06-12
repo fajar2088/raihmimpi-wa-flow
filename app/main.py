@@ -485,19 +485,15 @@ def api_donasi():
         "transaksi": transaksi_sorted[:100],
     })
 
-@app.route("/dashboard", methods=["GET"])
-def dashboard():
-    """Dashboard donasi sederhana (mirip Halosis dashboard)."""
-    html = """<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard Donasi - Raihmimpi</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
+LAYOUT_CSS = """
   * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
-  body { background:#f3f4f8; color:#1f2330; padding:24px; }
+  body { background:#f3f4f8; color:#1f2330; display:flex; min-height:100vh; }
+  .sidebar { width:220px; background:#5b3df0; color:#fff; padding:24px 0; flex-shrink:0; }
+  .sidebar .logo { font-size:20px; font-weight:700; padding:0 24px 24px; }
+  .sidebar a { display:flex; align-items:center; gap:10px; padding:12px 24px; color:#e0d9ff; text-decoration:none; font-size:14px; }
+  .sidebar a.active { background:rgba(255,255,255,.15); color:#fff; font-weight:600; border-radius:0 20px 20px 0; }
+  .sidebar a:hover { color:#fff; }
+  .main { flex:1; padding:24px; min-width:0; }
   h1 { font-size:22px; margin-bottom:4px; }
   .subtitle { color:#6b7280; margin-bottom:20px; font-size:14px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
@@ -506,27 +502,73 @@ def dashboard():
   .card .value { font-size:28px; font-weight:700; color:#5b3df0; margin:8px 0 4px; }
   .card .label { color:#6b7280; font-size:14px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } }
+  @media (max-width: 800px) { .grid2 { grid-template-columns:1fr; } .sidebar { display:none; } }
   .panel { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .panel h2 { font-size:16px; margin-bottom:12px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid #eee; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eee; }
   th { color:#6b7280; font-weight:600; }
+  tr:hover td { background:#f9fafb; }
+  a.row-link { text-decoration:none; color:inherit; }
   .badge { padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600; }
   .badge.lunas { background:#dcfce7; color:#16a34a; }
   .badge.pending { background:#fef3c7; color:#d97706; }
   .badge.gagal { background:#fee2e2; color:#dc2626; }
   .refresh { font-size:12px; color:#9ca3af; margin-top:16px; }
-</style>
+  .filters { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .filters label { font-size:12px; color:#6b7280; display:block; margin-bottom:4px; }
+  .filters input, .filters select { padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:13px; min-width:160px; }
+  .btn { background:#5b3df0; color:#fff; border:none; padding:9px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn:hover { background:#4c30d9; }
+  .back-link { display:inline-block; margin-bottom:16px; color:#5b3df0; text-decoration:none; font-size:14px; font-weight:600; }
+  .detail-row { display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #eee; font-size:14px; }
+  .detail-row .label { color:#6b7280; }
+  .detail-row .val { font-weight:600; text-align:right; }
+"""
+
+def render_sidebar(active):
+    items = [
+        ("dashboard", "/dashboard", "📊", "Dashboard"),
+        ("pesanan", "/pesanan", "📋", "Pesanan"),
+        ("kampanye", "/kampanye", "🎯", "Kampanye"),
+    ]
+    links = "".join(
+        f'<a href="{url}" class="{"active" if key == active else ""}"><span>{icon}</span><span>{label}</span></a>'
+        for key, url, icon, label in items
+    )
+    return f"""<div class="sidebar">
+  <div class="logo">🤲 Raihmimpi</div>
+  {links}
+</div>"""
+
+def render_page(active, title, subtitle, body_html, extra_head=""):
+    return f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title} - Raihmimpi</title>
+{extra_head}
+<style>{LAYOUT_CSS}</style>
 </head>
 <body>
-  <h1>Dashboard Donasi Raihmimpi</h1>
-  <div class="subtitle">via WhatsApp Flow &middot; +62 851-1123-4962</div>
+{render_sidebar(active)}
+<div class="main">
+  <h1>{title}</h1>
+  <div class="subtitle">{subtitle}</div>
+  {body_html}
+</div>
+</body>
+</html>"""
 
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    """Dashboard donasi sederhana (mirip Halosis dashboard)."""
+    body = """
   <div class="cards">
-    <div class="card"><div class="icon">💰</div><div class="value" id="total_nominal">-</div><div class="label">Total Nominal Donasi (Lunas)</div></div>
-    <div class="card"><div class="icon">📋</div><div class="value" id="total_donasi">-</div><div class="label">Total Donasi (Lunas)</div></div>
-    <div class="card"><div class="icon">👥</div><div class="value" id="total_donatur">-</div><div class="label">Total Donatur</div></div>
+    <div class="card"><div class="icon">&#128176;</div><div class="value" id="total_nominal">-</div><div class="label">Total Nominal Donasi (Lunas)</div></div>
+    <div class="card"><div class="icon">&#128203;</div><div class="value" id="total_donasi">-</div><div class="label">Total Donasi (Lunas)</div></div>
+    <div class="card"><div class="icon">&#128101;</div><div class="value" id="total_donatur">-</div><div class="label">Total Donatur</div></div>
   </div>
 
   <div class="grid2">
@@ -583,7 +625,7 @@ async function loadData() {
 
   const tbody = document.getElementById("tabelDonasi");
   tbody.innerHTML = json.transaksi.map(t => `
-    <tr>
+    <tr class="row-link" onclick="window.location='/pesanan/${t.order_id}'" style="cursor:pointer">
       <td>${formatWaktu(t.created_at)}</td>
       <td>${t.donatur || "-"}</td>
       <td>${t.kampanye || "-"}</td>
@@ -598,9 +640,168 @@ async function loadData() {
 loadData();
 setInterval(loadData, 30000);
 </script>
-</body>
-</html>"""
-    return Response(html, mimetype="text/html")
+"""
+    return Response(render_page("dashboard", "Dashboard Donasi Raihmimpi", "via WhatsApp Flow &middot; +62 851-1123-4962", body,
+        extra_head='<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'), mimetype="text/html")
+
+
+@app.route("/pesanan", methods=["GET"])
+def pesanan():
+    """Daftar pesanan donasi dengan filter (mirip Halosis Daftar Donasi)."""
+    body = """
+  <div class="panel">
+    <div class="filters">
+      <div>
+        <label>No. Transaksi</label>
+        <input type="text" id="f_order" placeholder="RM-...">
+      </div>
+      <div>
+        <label>Nama Donatur</label>
+        <input type="text" id="f_donatur" placeholder="Nama donatur">
+      </div>
+      <div>
+        <label>Nomor HP</label>
+        <input type="text" id="f_phone" placeholder="62...">
+      </div>
+      <div>
+        <label>Status Donasi</label>
+        <select id="f_status">
+          <option value="">(Semua)</option>
+          <option value="pending">Pending</option>
+          <option value="lunas">Lunas</option>
+          <option value="gagal">Gagal</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="btn" onclick="loadData()">Cari</button>
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>No. Transaksi</th><th>Tanggal</th><th>Nama Donatur</th><th>Nomor HP</th>
+        <th>Nama Donasi</th><th>Tipe</th><th>Total</th><th>Status</th>
+      </tr></thead>
+      <tbody id="tabelPesanan"></tbody>
+    </table>
+  </div>
+  <div class="refresh">Auto-refresh setiap 30 detik &middot; <span id="lastUpdate"></span></div>
+
+<script>
+function formatRupiah(n) {
+  return "Rp " + Number(n).toLocaleString("id-ID");
+}
+function formatWaktu(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("id-ID", {dateStyle:"medium", timeStyle:"short"});
+}
+let allData = [];
+async function loadData() {
+  const res = await fetch("/api/donasi");
+  const json = await res.json();
+  allData = json.transaksi;
+  render();
+  document.getElementById("lastUpdate").textContent = "Update: " + new Date().toLocaleTimeString("id-ID");
+}
+function render() {
+  const fOrder = document.getElementById("f_order").value.toLowerCase();
+  const fDonatur = document.getElementById("f_donatur").value.toLowerCase();
+  const fPhone = document.getElementById("f_phone").value.toLowerCase();
+  const fStatus = document.getElementById("f_status").value;
+
+  const filtered = allData.filter(t => {
+    if (fOrder && !(t.order_id || "").toLowerCase().includes(fOrder)) return false;
+    if (fDonatur && !(t.donatur || "").toLowerCase().includes(fDonatur)) return false;
+    if (fPhone && !(t.phone || "").toLowerCase().includes(fPhone)) return false;
+    if (fStatus && t.status !== fStatus) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById("tabelPesanan");
+  tbody.innerHTML = filtered.map(t => `
+    <tr class="row-link" onclick="window.location='/pesanan/${t.order_id}'" style="cursor:pointer">
+      <td>${t.order_id}</td>
+      <td>${formatWaktu(t.created_at)}</td>
+      <td>${t.donatur || "-"}</td>
+      <td>${t.phone || "-"}</td>
+      <td>${t.kampanye || "-"}</td>
+      <td>${t.tipe === "rutin" ? "Rutin" : "Sekali"}</td>
+      <td>${formatRupiah(t.nominal || 0)}</td>
+      <td><span class="badge ${t.status}">${t.status}</span></td>
+    </tr>
+  `).join("") || "<tr><td colspan='8' style='text-align:center;color:#9ca3af'>Tidak ada pesanan ditemukan</td></tr>";
+}
+['f_order','f_donatur','f_phone'].forEach(id => document.getElementById(id).addEventListener("keyup", render));
+document.getElementById("f_status").addEventListener("change", render);
+loadData();
+setInterval(loadData, 30000);
+</script>
+"""
+    return Response(render_page("pesanan", "Daftar Pesanan Donasi", "Semua transaksi donasi via WhatsApp Flow", body), mimetype="text/html")
+
+
+@app.route("/pesanan/<order_id>", methods=["GET"])
+def pesanan_detail(order_id):
+    """Detail satu pesanan donasi."""
+    transaksi = load_data()
+    t = next((x for x in transaksi if x.get("order_id") == order_id), None)
+
+    if not t:
+        body = '<div class="panel"><p>Pesanan tidak ditemukan.</p><a href="/pesanan" class="back-link">&larr; Kembali ke Daftar Pesanan</a></div>'
+        return Response(render_page("pesanan", "Detail Pesanan", order_id, body), mimetype="text/html")
+
+    def fmt_waktu(iso):
+        if not iso:
+            return "-"
+        try:
+            dt = datetime.fromisoformat(iso)
+            return dt.strftime("%d %b %Y, %H:%M")
+        except Exception:
+            return iso
+
+    status_badge = f'<span class="badge {t.get("status","pending")}">{t.get("status","pending")}</span>'
+
+    rows = [
+        ("No. Transaksi", t.get("order_id", "-")),
+        ("Tanggal Dibuat", fmt_waktu(t.get("created_at"))),
+        ("Tanggal Lunas", fmt_waktu(t.get("paid_at")) if t.get("paid_at") else "-"),
+        ("Status", status_badge),
+        ("Nama Donatur", t.get("donatur", "-")),
+        ("Atas Nama", t.get("atas_nama", "-")),
+        ("Nomor HP", t.get("phone", "-")),
+        ("Kampanye", t.get("kampanye", "-")),
+        ("ID Kampanye", t.get("kampanye_id", "-")),
+        ("Tipe Donasi", "Donasi Rutin" if t.get("tipe") == "rutin" else "Donasi Sekali"),
+        ("Nominal", "Rp " + "{:,}".format(t.get("nominal", 0)).replace(",", ".")),
+    ]
+    if t.get("payment_url"):
+        rows.append(("Link Pembayaran", f'<a href="{t["payment_url"]}" target="_blank" style="color:#5b3df0;">{t["payment_url"][:50]}...</a>'))
+
+    rows_html = "".join(
+        f'<div class="detail-row"><span class="label">{label}</span><span class="val">{value}</span></div>'
+        for label, value in rows
+    )
+
+    body = f"""
+  <a href="/pesanan" class="back-link">&larr; Kembali ke Daftar Pesanan</a>
+  <div class="panel">
+    <h2>Informasi Donasi</h2>
+    {rows_html}
+  </div>
+"""
+    return Response(render_page("pesanan", "Detail Pesanan", t.get("order_id", order_id), body), mimetype="text/html")
+
+
+@app.route("/kampanye", methods=["GET"])
+def kampanye_page():
+    """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
+    body = """
+  <div class="panel">
+    <p style="color:#6b7280;">Halaman untuk memilih kampanye yang ditampilkan di Flow donasi sedang dalam pengembangan.</p>
+  </div>
+"""
+    return Response(render_page("kampanye", "Kelola Kampanye", "Pilih kampanye yang muncul di Flow donasi", body), mimetype="text/html")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
