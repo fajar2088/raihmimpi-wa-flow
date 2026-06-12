@@ -329,7 +329,7 @@ def midtrans_callback():
         logger.error(f"Error midtrans-callback: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route("/kampanye", methods=["GET"])
+@app.route("/api/kampanye-source", methods=["GET"])
 def list_kampanye():
     campaigns = get_campaigns()
     return jsonify({"total": len(campaigns), "formatted": format_campaigns_for_flow(campaigns)})
