@@ -1114,7 +1114,9 @@ def halosis_webhook():
             logger.info(f"CTWA referral disimpan untuk {clean_phone}: clid={ctwa_clid[:30]}... headline={referral.get('headline','')}")
 
             # Kirim Pixel event Lead (kontak baru dari ad masuk = qualified lead)
-            if is_new_contact:
+            # Cek via ctwa_clid lama (bukan is_new_contact, karena record_incoming_message sudah create contact)
+            had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
+            if not had_ctwa_before:
                 try:
                     send_pixel_event("Lead", phone=clean_phone, currency="IDR",
                                       event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
