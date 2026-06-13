@@ -241,7 +241,28 @@ def send_menu_utama(to_phone):
         buttons.append({"id": btn_id, "title": b.get("label", "")})
     if not buttons:
         buttons = [{"id": "btn_donasi", "title": "Mulai Donasi"}]
-    return send_wa_buttons(to_phone, message, buttons[:3])
+    resp = send_wa_buttons(to_phone, message, buttons[:3])
+    # Simpan ke inbox sebagai outgoing message interactive (untuk render di chat dashboard)
+    try:
+        inbox = load_inbox()
+        contacts = inbox.setdefault("contacts", {})
+        messages = inbox.setdefault("messages", {})
+        contact = contacts.get(to_phone, {"phone": to_phone, "name": to_phone, "labels": [], "unread": 0})
+        contact["last_message"] = message
+        contact["last_message_at"] = datetime.now().isoformat()
+        contacts[to_phone] = contact
+        msg_list = messages.setdefault(to_phone, [])
+        msg_list.append({
+            "direction": "out",
+            "type": "interactive",
+            "text": message,
+            "buttons": [b["title"] for b in buttons[:3]],
+            "timestamp": datetime.now().isoformat(),
+        })
+        save_inbox(inbox)
+    except Exception as e:
+        logger.error(f"Gagal record Menu Utama outgoing: {e}")
+    return resp
 
 # ID Flow donasi (didapat dari WhatsApp Manager > Flows)
 DONASI_FLOW_ID = os.environ.get("DONASI_FLOW_ID", "")
