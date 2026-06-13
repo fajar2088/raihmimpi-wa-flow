@@ -2249,6 +2249,340 @@ loadKampanye();
     return Response(render_page("kampanye", "Kelola Kampanye", "Pilih kampanye yang muncul di Flow donasi", body), mimetype="text/html")
 
 
+# ============================================================
+# Label Kontak (Contact Labels)
+# ============================================================
+def load_labels():
+    """Load master labels dari settings.json."""
+    settings = load_settings()
+    return settings.get("labels", [])
+
+def save_labels(labels):
+    """Simpan master labels ke settings.json."""
+    settings = load_settings()
+    settings["labels"] = labels
+    save_settings(settings)
+
+@app.route("/api/labels", methods=["GET"])
+def api_labels_list():
+    """List semua master label."""
+    return jsonify({"labels": load_labels()})
+
+@app.route("/api/labels", methods=["POST"])
+def api_labels_create():
+    """Create label baru."""
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Nama label wajib diisi"}), 400
+    labels = load_labels()
+    # Cek duplikat nama
+    if any(l.get("name", "").lower() == name.lower() for l in labels):
+        return jsonify({"error": f"Label dengan nama '{name}' sudah ada"}), 400
+    new_label = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "bg_color": body.get("bg_color", "#5b3df0"),
+        "text_color": body.get("text_color", "#ffffff"),
+        "category": body.get("category", ""),
+    }
+    labels.append(new_label)
+    save_labels(labels)
+    return jsonify(new_label)
+
+@app.route("/api/labels/<label_id>", methods=["PUT"])
+def api_labels_update(label_id):
+    """Update label by id."""
+    body = request.get_json(silent=True) or {}
+    labels = load_labels()
+    for label in labels:
+        if label.get("id") == label_id:
+            if "name" in body:
+                name = (body["name"] or "").strip()
+                if not name:
+                    return jsonify({"error": "Nama tidak boleh kosong"}), 400
+                # Cek duplikat (kecuali diri sendiri)
+                if any(l.get("name", "").lower() == name.lower() and l.get("id") != label_id for l in labels):
+                    return jsonify({"error": f"Label dengan nama '{name}' sudah ada"}), 400
+                label["name"] = name
+            if "bg_color" in body:
+                label["bg_color"] = body["bg_color"]
+            if "text_color" in body:
+                label["text_color"] = body["text_color"]
+            if "category" in body:
+                label["category"] = body["category"]
+            save_labels(labels)
+            return jsonify(label)
+    return jsonify({"error": "Label tidak ditemukan"}), 404
+
+@app.route("/api/labels/<label_id>", methods=["DELETE"])
+def api_labels_delete(label_id):
+    """Hapus label + bersihkan dari semua kontak."""
+    labels = load_labels()
+    new_labels = [l for l in labels if l.get("id") != label_id]
+    if len(new_labels) == len(labels):
+        return jsonify({"error": "Label tidak ditemukan"}), 404
+    save_labels(new_labels)
+    # Bersihkan label dari semua contact
+    inbox = load_inbox()
+    cleaned = 0
+    for phone, contact in inbox.get("contacts", {}).items():
+        if label_id in contact.get("labels", []):
+            contact["labels"] = [lid for lid in contact["labels"] if lid != label_id]
+            cleaned += 1
+    if cleaned > 0:
+        save_inbox(inbox)
+    return jsonify({"status": "ok", "cleaned_contacts": cleaned})
+
+@app.route("/labels", methods=["GET"])
+def labels_page():
+    """Halaman manajemen master label."""
+    body = """
+<style>
+  .labels-wrap { padding:20px; }
+  .labels-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .labels-header h2 { margin:0; font-size:20px; font-weight:700; }
+  .btn-add { background:#5b3df0; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; }
+  .btn-add:hover { background:#4c30d9; }
+  .labels-table { width:100%; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .labels-table th { background:#f9fafb; padding:12px 16px; text-align:left; font-size:13px; color:#6b7280; font-weight:600; border-bottom:1px solid #e5e7eb; }
+  .labels-table td { padding:14px 16px; border-bottom:1px solid #f3f4f6; font-size:14px; }
+  .labels-table tr:hover { background:#fafafa; }
+  .label-preview { display:inline-block; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600; }
+  .color-swatch { display:inline-flex; align-items:center; gap:6px; font-family:monospace; font-size:12px; }
+  .color-box { width:20px; height:20px; border-radius:4px; border:1px solid #e5e7eb; }
+  .btn-icon { background:none; border:none; cursor:pointer; padding:6px 8px; border-radius:6px; font-size:14px; }
+  .btn-icon:hover { background:#f3f4f6; }
+  .btn-edit { color:#5b3df0; }
+  .btn-delete { color:#dc2626; }
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); align-items:center; justify-content:center; z-index:1000; }
+  .modal-overlay.show { display:flex; }
+  .modal-card { background:#fff; border-radius:12px; padding:24px; width:480px; max-width:90vw; }
+  .modal-card h3 { margin:0 0 20px 0; font-size:18px; font-weight:700; }
+  .form-group { margin-bottom:16px; }
+  .form-group label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151; }
+  .form-group input[type=text] { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; box-sizing:border-box; }
+  .form-group input[type=color] { width:60px; height:40px; border:1px solid #d1d5db; border-radius:8px; cursor:pointer; padding:2px; }
+  .color-row { display:flex; gap:16px; align-items:flex-end; }
+  .color-input-wrap { display:flex; gap:8px; align-items:center; }
+  .color-input-wrap input[type=text] { width:100px; font-family:monospace; }
+  .preview-section { background:#f9fafb; padding:14px; border-radius:8px; margin:16px 0; text-align:center; }
+  .preview-section .pv-label { font-size:12px; color:#6b7280; margin-bottom:8px; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+  .btn-cancel { background:#f3f4f6; color:#374151; border:none; padding:10px 20px; border-radius:8px; font-weight:600; cursor:pointer; }
+  .btn-save { background:#5b3df0; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-weight:600; cursor:pointer; }
+  .empty-state { padding:60px 20px; text-align:center; color:#9ca3af; background:#fff; border-radius:8px; }
+  .empty-state .icon { font-size:48px; margin-bottom:12px; }
+</style>
+<div class="labels-wrap">
+  <div class="labels-header">
+    <h2>Daftar Label Kontak</h2>
+    <button class="btn-add" onclick="openLabelModal()">+ Tambah Label</button>
+  </div>
+  <div id="labelsContainer"></div>
+</div>
+
+<div class="modal-overlay" id="labelModal">
+  <div class="modal-card">
+    <h3 id="modalTitle">Tambah Label</h3>
+    <input type="hidden" id="labelId">
+    <div class="form-group">
+      <label>Nama Label *</label>
+      <input type="text" id="labelName" placeholder="Contoh: HOT, Donatur Rutin" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Kategori (opsional)</label>
+      <input type="text" id="labelCategory" placeholder="Contoh: Donatur, Sumber, Status" maxlength="30">
+    </div>
+    <div class="color-row">
+      <div class="form-group" style="margin:0;">
+        <label>Warna Latar</label>
+        <div class="color-input-wrap">
+          <input type="color" id="labelBgColor" value="#5b3df0" onchange="syncColor('bg')">
+          <input type="text" id="labelBgHex" value="#5b3df0" onchange="syncHex('bg')">
+        </div>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Warna Teks</label>
+        <div class="color-input-wrap">
+          <input type="color" id="labelTextColor" value="#ffffff" onchange="syncColor('text')">
+          <input type="text" id="labelTextHex" value="#ffffff" onchange="syncHex('text')">
+        </div>
+      </div>
+    </div>
+    <div class="preview-section">
+      <div class="pv-label">Preview:</div>
+      <span class="label-preview" id="labelPreview" style="background:#5b3df0;color:#fff;">Label</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeLabelModal()">Batal</button>
+      <button class="btn-save" id="btnSaveLabel" onclick="saveLabel()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allLabels = [];
+
+async function loadLabels() {
+  try {
+    const res = await fetch("/api/labels");
+    const data = await res.json();
+    allLabels = data.labels || [];
+    renderLabels();
+  } catch (e) {
+    document.getElementById("labelsContainer").innerHTML = `<div class="empty-state">Error memuat label: ${e.message}</div>`;
+  }
+}
+
+function renderLabels() {
+  const container = document.getElementById("labelsContainer");
+  if (allLabels.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">🏷️</div><div>Belum ada label.</div><div style="margin-top:8px;font-size:13px;">Klik <b>+ Tambah Label</b> untuk membuat label pertama.</div></div>`;
+    return;
+  }
+  const rows = allLabels.map(l => `
+    <tr>
+      <td>
+        <span class="label-preview" style="background:${l.bg_color};color:${l.text_color};">${escapeHtml(l.name)}</span>
+      </td>
+      <td>${l.category ? escapeHtml(l.category) : '<span style="color:#9ca3af;">-</span>'}</td>
+      <td><span class="color-swatch"><span class="color-box" style="background:${l.bg_color};"></span>${l.bg_color}</span></td>
+      <td><span class="color-swatch"><span class="color-box" style="background:${l.text_color};"></span>${l.text_color}</span></td>
+      <td style="text-align:right;">
+        <button class="btn-icon btn-edit" onclick="editLabel('${l.id}')" title="Edit">✏️</button>
+        <button class="btn-icon btn-delete" onclick="deleteLabel('${l.id}', '${escapeHtml(l.name).replace(/'/g,"&#39;")}')" title="Hapus">🗑️</button>
+      </td>
+    </tr>
+  `).join("");
+  container.innerHTML = `
+    <table class="labels-table">
+      <thead><tr><th>Nama Label</th><th>Kategori</th><th>Warna Latar</th><th>Warna Teks</th><th style="text-align:right;">Aksi</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function openLabelModal(label) {
+  document.getElementById("modalTitle").textContent = label ? "Edit Label" : "Tambah Label";
+  document.getElementById("labelId").value = label ? label.id : "";
+  document.getElementById("labelName").value = label ? label.name : "";
+  document.getElementById("labelCategory").value = label && label.category ? label.category : "";
+  document.getElementById("labelBgColor").value = label ? label.bg_color : "#5b3df0";
+  document.getElementById("labelBgHex").value = label ? label.bg_color : "#5b3df0";
+  document.getElementById("labelTextColor").value = label ? label.text_color : "#ffffff";
+  document.getElementById("labelTextHex").value = label ? label.text_color : "#ffffff";
+  updatePreview();
+  document.getElementById("labelModal").classList.add("show");
+  setTimeout(() => document.getElementById("labelName").focus(), 100);
+}
+
+function closeLabelModal() {
+  document.getElementById("labelModal").classList.remove("show");
+}
+
+function syncColor(field) {
+  if (field === "bg") {
+    document.getElementById("labelBgHex").value = document.getElementById("labelBgColor").value;
+  } else {
+    document.getElementById("labelTextHex").value = document.getElementById("labelTextColor").value;
+  }
+  updatePreview();
+}
+
+function syncHex(field) {
+  if (field === "bg") {
+    const hex = document.getElementById("labelBgHex").value;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) document.getElementById("labelBgColor").value = hex;
+  } else {
+    const hex = document.getElementById("labelTextHex").value;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) document.getElementById("labelTextColor").value = hex;
+  }
+  updatePreview();
+}
+
+function updatePreview() {
+  const name = document.getElementById("labelName").value || "Label";
+  const bg = document.getElementById("labelBgHex").value;
+  const text = document.getElementById("labelTextHex").value;
+  const pv = document.getElementById("labelPreview");
+  pv.style.background = bg;
+  pv.style.color = text;
+  pv.textContent = name;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const nameInput = document.getElementById("labelName");
+  if (nameInput) nameInput.addEventListener("input", updatePreview);
+});
+
+function editLabel(id) {
+  const label = allLabels.find(l => l.id === id);
+  if (label) openLabelModal(label);
+}
+
+async function deleteLabel(id, name) {
+  if (!confirm(`Hapus label "${name}"?\n\nLabel ini juga akan dihapus dari semua kontak yang memilikinya.`)) return;
+  try {
+    const res = await fetch(`/api/labels/${id}`, {method: "DELETE"});
+    const data = await res.json();
+    if (data.status === "ok") {
+      alert(`✓ Label dihapus.${data.cleaned_contacts > 0 ? " Dibersihkan dari " + data.cleaned_contacts + " kontak." : ""}`);
+      loadLabels();
+    } else {
+      alert("Gagal: " + (data.error || "unknown"));
+    }
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function saveLabel() {
+  const id = document.getElementById("labelId").value;
+  const name = document.getElementById("labelName").value.trim();
+  if (!name) {
+    alert("Nama label wajib diisi.");
+    return;
+  }
+  const bg_color = document.getElementById("labelBgHex").value;
+  const text_color = document.getElementById("labelTextHex").value;
+  const category = document.getElementById("labelCategory").value.trim();
+  const payload = {name, bg_color, text_color, category};
+  const btn = document.getElementById("btnSaveLabel");
+  btn.disabled = true;
+  btn.textContent = "Menyimpan...";
+  try {
+    let res;
+    if (id) {
+      res = await fetch(`/api/labels/${id}`, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+    } else {
+      res = await fetch(`/api/labels`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+    }
+    const data = await res.json();
+    if (res.ok) {
+      closeLabelModal();
+      loadLabels();
+    } else {
+      alert("Gagal: " + (data.error || "unknown"));
+    }
+  } catch (e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Simpan";
+  }
+}
+
+loadLabels();
+</script>
+"""
+    return Response(render_page("labels", "Label Kontak", "Atur label kontak: nama, warna, dan kategori", body), mimetype="text/html")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
