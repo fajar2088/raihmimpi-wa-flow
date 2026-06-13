@@ -1912,7 +1912,7 @@ def kampanye_page():
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
       <div>
         <h3 style="margin:0 0 4px;">Pilih Kampanye Aktif</h3>
-        <p style="color:#6b7280;margin:0;font-size:14px;">Kampanye yang dicentang akan muncul di Flow donasi WhatsApp (max 3 yang ditampilkan dengan gambar).</p>
+        <p style="color:#6b7280;margin:0;font-size:14px;">Kampanye yang dicentang akan muncul di Flow donasi WhatsApp (max 5 yang ditampilkan dengan gambar).</p>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn" onclick="clearAll()" style="background:#f3f4f6;color:#374151;">Kosongkan</button>
