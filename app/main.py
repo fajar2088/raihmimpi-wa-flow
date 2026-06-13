@@ -122,7 +122,7 @@ def format_campaigns_with_images(campaigns, limit=3):
         terkumpul = format_rupiah(terkumpul_raw)
 
         img_url = c.get("IMG_MOBILE") or c.get("IMG_CAMPAIGNER") or c.get("IMG_BIG", "")
-        image_b64 = fetch_and_resize_image(img_url) if img_url else ""
+        image_b64 = ""  # TEMP: dikosongkan untuk test isolasi masalah navigate payload size
 
         result.append({
             "id": campaign_id,
