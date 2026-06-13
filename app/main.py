@@ -151,9 +151,11 @@ def create_midtrans_payment(order_id, amount, donatur_name, phone, campaign_name
     return resp.json().get("redirect_url")
 
 def send_wa_message(to_phone, message):
-    url = f"https://graph.facebook.com/v19.0/{WA_PHONE_NUMBER_ID}/messages"
-    requests.post(url, json={"messaging_product": "whatsapp", "to": to_phone, "type": "text", "text": {"body": message}},
+    url = f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages"
+    resp = requests.post(url, json={"messaging_product": "whatsapp", "to": to_phone, "type": "text", "text": {"body": message}},
         headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"}, timeout=10)
+    logger.info(f"send_wa_message to={to_phone} status={resp.status_code} body={resp.text[:200]}")
+    return resp
 
 # ID Flow donasi (didapat dari WhatsApp Manager > Flows)
 DONASI_FLOW_ID = os.environ.get("DONASI_FLOW_ID", "")
