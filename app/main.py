@@ -56,7 +56,28 @@ def decrypt_request(body):
 def encrypt_response(response_data, aes_key, iv):
     return default_flow_response_encryptor(response_data, aes_key, iv)
 
-def get_campaigns():
+_campaigns_cache = {"data": None, "ts": 0}
+
+def get_campaigns(full=False):
+    """Ambil kampanye dari API Raihmimpi.
+    - full=False (default): return 5 default (page=1) — untuk Flow donasi, cepat
+    - full=True: return SEMUA kampanye (page=100 → plateau ~455), dengan cache 5 menit"""
+    import time
+    if full:
+        now = time.time()
+        if _campaigns_cache["data"] is not None and (now - _campaigns_cache["ts"]) < 300:
+            return _campaigns_cache["data"]
+        try:
+            resp = requests.get(RAIHMIMPI_API + "?page=100", timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            _campaigns_cache["data"] = data
+            _campaigns_cache["ts"] = now
+            logger.info(f"get_campaigns(full=True) refreshed: {len(data)} kampanye")
+            return data
+        except Exception as e:
+            logger.error(f"Error ambil semua kampanye: {e}")
+            return _campaigns_cache["data"] or []
     try:
         resp = requests.get(RAIHMIMPI_API, timeout=10)
         resp.raise_for_status()
@@ -1853,7 +1874,7 @@ loadMenuUtama();
 @app.route("/api/kampanye-list", methods=["GET"])
 def api_kampanye_list():
     """Return semua kampanye dari API Raihmimpi + flag aktif."""
-    campaigns = get_campaigns()
+    campaigns = get_campaigns(full=True)
     settings = load_settings()
     aktif_ids = [str(x) for x in settings.get("kampanye_aktif", [])]
     result = []
