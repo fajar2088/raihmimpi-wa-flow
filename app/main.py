@@ -1080,20 +1080,80 @@ def halosis_webhook():
         clean_phone_inbox = phone.replace("+", "").replace(" ", "").replace("-", "")
         record_incoming_message(clean_phone_inbox, text, msg_type="text", name=contact_name)
 
-        text_lower = text.lower()
-        if any(kw in text_lower for kw in DONASI_KEYWORDS):
-            # Normalisasi nomor (hapus + dan spasi/strip)
-            clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-            try:
-                resp = halosis_send_flow_message(clean_phone)
-                return jsonify({"status": "flow_sent_via_halosis", "to": clean_phone, "halosis_status": resp.status_code, "halosis_body": resp.text[:300]}), 200
-            except Exception as he:
-                logger.error(f"halosis_send_flow_message failed: {he}", exc_info=True)
-                # fallback ke Graph API langsung
-                send_wa_flow_message(clean_phone)
-                return jsonify({"status": "flow_sent_via_graph_fallback", "to": clean_phone}), 200
+        # Normalisasi nomor (hapus + dan spasi/strip)
+        clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
 
-        return jsonify({"status": "ignored", "reason": "no keyword match"}), 200
+        # Extract referral (CTWA Instagram/Facebook ad)
+        referral = {}
+        ctwa_clid = ""
+        try:
+            ref_data = body.get("data", {}).get("referral")
+            if isinstance(ref_data, dict):
+                referral = ref_data
+                ctwa_clid = ref_data.get("ctwa_clid", "")
+        except Exception:
+            pass
+
+        # Cek apakah kontak baru
+        inbox = load_inbox()
+        existing_contact = inbox.get("contacts", {}).get(clean_phone)
+        is_new_contact = existing_contact is None
+        menu_already_sent = existing_contact and existing_contact.get("menu_sent")
+        already_resolved = existing_contact and existing_contact.get("status") == "selesai"
+
+        # Simpan metadata CTWA ke contact (untuk attribution Meta Ads)
+        if referral:
+            inbox = load_inbox()
+            contact_rec = inbox.get("contacts", {}).get(clean_phone, {})
+            contact_rec["ctwa_clid"] = ctwa_clid
+            contact_rec["ad_source_url"] = referral.get("source_url", "")
+            contact_rec["ad_headline"] = referral.get("headline", "")
+            contact_rec["ad_source_type"] = referral.get("source_type", "")
+            inbox["contacts"][clean_phone] = contact_rec
+            save_inbox(inbox)
+            logger.info(f"CTWA referral disimpan untuk {clean_phone}: clid={ctwa_clid[:30]}... headline={referral.get('headline','')}")
+
+            # Kirim Pixel event Lead (kontak baru dari ad masuk = qualified lead)
+            if is_new_contact:
+                try:
+                    send_pixel_event("Lead", phone=clean_phone, currency="IDR",
+                                      event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
+                                      content_name=referral.get("headline", "CTWA Raihmimpi"))
+                except Exception as pe:
+                    logger.error(f"Pixel Lead event gagal: {pe}")
+
+        text_lower = (text or "").lower()
+
+        # Logic 1: Keyword donasi → kirim Flow donasi langsung via WA Cloud API
+        if any(kw in text_lower for kw in DONASI_KEYWORDS):
+            try:
+                send_wa_flow_message(clean_phone)
+                logger.info(f"Flow donasi dikirim ke {clean_phone} via Halosis webhook (keyword match)")
+                # Set menu_sent agar tidak double-kirim Menu Utama setelah ini
+                inbox = load_inbox()
+                if clean_phone in inbox.get("contacts", {}):
+                    inbox["contacts"][clean_phone]["menu_sent"] = True
+                    save_inbox(inbox)
+                return jsonify({"status": "flow_sent", "to": clean_phone}), 200
+            except Exception as fe:
+                logger.error(f"send_wa_flow_message gagal: {fe}", exc_info=True)
+                return jsonify({"status": "flow_failed", "to": clean_phone, "error": str(fe)}), 200
+
+        # Logic 2: Kontak baru atau belum di-resolve & belum dapat Menu Utama → kirim Menu Utama
+        if (is_new_contact or not already_resolved) and not menu_already_sent:
+            try:
+                send_menu_utama(clean_phone)
+                inbox = load_inbox()
+                if clean_phone in inbox.get("contacts", {}):
+                    inbox["contacts"][clean_phone]["menu_sent"] = True
+                    save_inbox(inbox)
+                logger.info(f"Menu Utama dikirim ke {clean_phone} via Halosis webhook")
+                return jsonify({"status": "menu_sent", "to": clean_phone}), 200
+            except Exception as me:
+                logger.error(f"send_menu_utama gagal: {me}", exc_info=True)
+                return jsonify({"status": "menu_failed", "to": clean_phone, "error": str(me)}), 200
+
+        return jsonify({"status": "ignored", "reason": "menu sudah dikirim & bukan keyword donasi"}), 200
 
     except Exception as e:
         logger.error(f"Error halosis-webhook: {e}", exc_info=True)
