@@ -1251,6 +1251,7 @@ LAYOUT_CSS = """
   .chat-bubble.in { background:#fff; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.06); }
   .chat-bubble.out { background:#f3f4f6; color:#1f2937; align-self:flex-end; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
+  .chat-date-separator { align-self:center; background:#fff; border:1px solid #e5e7eb; color:#6b7280; font-size:12px; padding:6px 16px; border-radius:20px; margin:8px 0; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-input-bar { display:flex; gap:10px; padding:14px 16px; border-top:1px solid #eee; }
   .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
   .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
@@ -1714,7 +1715,40 @@ async function openChat(phone) {
     `;
   }
 
-  // Render messages - handle interactive (with buttons) dan text biasa
+  // Render messages - handle interactive (with buttons) dan text biasa + date separator
+  function formatDateSeparator(iso) {
+    if (!iso) return "";
+    let isoFixed = iso;
+    if (!/Z|[+-]\d{2}:?\d{2}$/.test(iso)) {
+      isoFixed = iso + "Z";
+    }
+    const d = new Date(isoFixed);
+    if (isNaN(d.getTime())) return "";
+    const today = new Date();
+    const todayWib = new Date(today.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+    const dWib = new Date(d.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+    const dayDiff = Math.floor((new Date(todayWib.getFullYear(), todayWib.getMonth(), todayWib.getDate()) - new Date(dWib.getFullYear(), dWib.getMonth(), dWib.getDate())) / 86400000);
+    if (dayDiff === 0) return "Hari ini";
+    if (dayDiff === 1) return "Kemarin";
+    if (dayDiff > 1 && dayDiff < 7) {
+      const hari = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+      return hari[dWib.getDay()];
+    }
+    const bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+    return dWib.getDate() + " " + bulan[dWib.getMonth()] + " " + dWib.getFullYear();
+  }
+  function dateKey(iso) {
+    if (!iso) return "";
+    let isoFixed = iso;
+    if (!/Z|[+-]\d{2}:?\d{2}$/.test(iso)) {
+      isoFixed = iso + "Z";
+    }
+    const d = new Date(isoFixed);
+    if (isNaN(d.getTime())) return "";
+    const dWib = new Date(d.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+    return dWib.getFullYear() + "-" + (dWib.getMonth()+1) + "-" + dWib.getDate();
+  }
+  let lastDateKey = "";
   const messagesHtml = messages.map(m => {
     const text = (m.text || "").replace(/</g,"&lt;").split(String.fromCharCode(10)).join("<br>");
     const buttons = (m.buttons && m.buttons.length) ? `
@@ -1722,7 +1756,13 @@ async function openChat(phone) {
         ${m.buttons.map(b => `<div style="padding:8px 12px;border:1px solid #5b3df0;border-radius:20px;text-align:center;color:#5b3df0;font-size:13px;font-weight:500;">${b.replace(/</g,"&lt;")}</div>`).join("")}
       </div>
     ` : "";
-    return `
+    const currentKey = dateKey(m.timestamp);
+    let separator = "";
+    if (currentKey && currentKey !== lastDateKey) {
+      separator = `<div class="chat-date-separator">${formatDateSeparator(m.timestamp)}</div>`;
+      lastDateKey = currentKey;
+    }
+    return separator + `
       <div class="chat-bubble ${m.direction}">
         <div>${text}</div>
         ${buttons}
