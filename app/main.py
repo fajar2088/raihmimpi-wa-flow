@@ -887,7 +887,7 @@ def _send_lunas_notif(t, order_id, source="sync"):
         msg_tg = "✅ <b>LUNAS (" + source + ")!</b>\n👤 " + str(t.get("donatur","")) + " (" + str(t.get("phone","")) + ")\n📋 " + str(t.get("kampanye","")) + "\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id
         notify_telegram(msg_tg)
         send_pixel_event("Purchase", phone=t["phone"], value=t.get("nominal",0), currency="IDR",
-                          event_id=f"purchase_{source}_{order_id}", content_name=t.get("kampanye",""),
+                          event_id=f"purchase_{order_id}", content_name=t.get("kampanye",""),
                           content_ids=[t.get("kampanye_id")] if t.get("kampanye_id") else None)
     except Exception as e:
         logger.error(f"_send_lunas_notif error {order_id}: {e}")
