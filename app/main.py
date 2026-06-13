@@ -714,11 +714,8 @@ def wa_flow_endpoint():
                                     button_reply_id = interactive.get("button_reply", {}).get("id")
                                     text = interactive.get("button_reply", {}).get("title", "")
                                 elif itype == "nfm_reply":
-                                    # Flow submission — tampilkan sebagai "📄 [Nama Flow] · Jawaban terkirim"
-                                    nfm = interactive.get("nfm_reply", {})
-                                    flow_name = nfm.get("name", "Flow")
-                                    body_txt = nfm.get("body", "Sent")
-                                    text = f"📄 {flow_name.title()} · {body_txt}"
+                                    # Flow submission — tampilkan persis seperti di WhatsApp
+                                    text = "📄 Mulai Donasi · Jawaban terkirim"
                                 else:
                                     text = json.dumps(interactive)[:500]
                             else:
