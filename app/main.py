@@ -332,7 +332,7 @@ def hash_sha256(value):
     return hashlib.sha256(str(value).strip().lower().encode("utf-8")).hexdigest()
 
 def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_id=None,
-                      content_name=None, content_ids=None, source_url=None):
+                      content_name=None, content_ids=None, source_url=None, ctwa_clid=None):
     """
     Kirim event ke Meta Conversions API (Pixel Raihmimpi).
     - phone: nomor WA donatur (62...), dipakai sebagai 'ph' (hashed) untuk matching.
@@ -348,6 +348,12 @@ def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_i
         # Normalisasi: pastikan format 62xxxxxxxxxx tanpa '+'
         clean = phone.replace("+", "").replace(" ", "").replace("-", "")
         user_data["ph"] = [hash_sha256(clean)]
+    # ctwa_clid wajib untuk CTWA attribution
+    if ctwa_clid:
+        user_data["ctwa_clid"] = ctwa_clid
+    # page_id di user_data (per dokumentasi Meta)
+    if META_PAGE_ID:
+        user_data["page_id"] = META_PAGE_ID
 
     custom_data = {"currency": currency}
     if value is not None:
@@ -366,10 +372,6 @@ def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_i
         "user_data": user_data,
         "custom_data": custom_data,
     }
-    # page_id wajib untuk action_source=business_messaging
-    if META_PAGE_ID:
-        event_data["page_id"] = META_PAGE_ID
-
     payload = {"data": [event_data]}
 
     try:
@@ -1122,9 +1124,10 @@ def halosis_webhook():
             had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
             if not had_ctwa_before:
                 try:
-                    send_pixel_event("Contact", phone=clean_phone, currency="IDR",
-                                      event_id=f"contact_{clean_phone}_{int(datetime.now().timestamp())}",
-                                      content_name=referral.get("headline", "CTWA Raihmimpi"))
+                    send_pixel_event("LeadSubmitted", phone=clean_phone, currency="IDR",
+                                      event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
+                                      content_name=referral.get("headline", "CTWA Raihmimpi"),
+                                      ctwa_clid=ctwa_clid)
                 except Exception as pe:
                     logger.error(f"Pixel Lead event gagal: {pe}")
 
