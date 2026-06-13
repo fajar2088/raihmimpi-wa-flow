@@ -781,12 +781,49 @@ def wa_flow_endpoint():
                                 if c.get("wa_id") == phone:
                                     contact_name = c.get("profile", {}).get("name")
 
-                            logger.info(f"WA WEBHOOK MSG from={phone} type={msg_type} button_id={button_reply_id} text={text}")
+                            # Extract CTWA referral (dari iklan Meta) - struktur Meta native
+                            referral = msg.get("referral") or {}
+                            ctwa_clid = referral.get("ctwa_clid", "")
+
+                            logger.info(f"WA WEBHOOK MSG from={phone} name={contact_name} type={msg_type} button_id={button_reply_id} text={text[:50] if text else ''} ctwa={ctwa_clid[:30] if ctwa_clid else 'no'}")
 
                             inbox_before = load_inbox()
                             existing_contact = inbox_before.get("contacts", {}).get(phone)
 
                             record_incoming_message(phone, text, msg_type="text" if msg_type == "text" else msg_type, name=contact_name)
+
+                            # Simpan metadata CTWA + nama jika ada
+                            if referral or contact_name:
+                                inbox = load_inbox()
+                                contact_rec = inbox.get("contacts", {}).get(phone, {})
+                                if contact_name and contact_name != phone:
+                                    contact_rec["name"] = contact_name
+                                if referral:
+                                    contact_rec["ctwa_clid"] = ctwa_clid
+                                    contact_rec["ad_source_url"] = referral.get("source_url", "")
+                                    contact_rec["ad_source_id"] = referral.get("source_id", "")
+                                    contact_rec["ad_source_type"] = referral.get("source_type", "")
+                                    contact_rec["ad_headline"] = referral.get("headline", "")
+                                    contact_rec["ad_body"] = referral.get("body", "")
+                                    contact_rec["ad_media_type"] = referral.get("media_type", "")
+                                    contact_rec["ad_image_url"] = referral.get("image_url", "")
+                                    contact_rec["ad_thumbnail_url"] = referral.get("thumbnail_url", "")
+                                inbox["contacts"][phone] = contact_rec
+                                save_inbox(inbox)
+                                if referral:
+                                    logger.info(f"CTWA referral disimpan {phone}: headline={referral.get('headline','')[:40]} img={(referral.get('image_url') or referral.get('thumbnail_url') or '')[:60]}")
+
+                                    # Pixel LeadSubmitted untuk CTWA (validasi ctwa_clid asli)
+                                    had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
+                                    is_valid_clid = ctwa_clid and len(ctwa_clid) >= 50 and not ctwa_clid.startswith("clid_test") and not ctwa_clid.startswith("test_")
+                                    if not had_ctwa_before and is_valid_clid:
+                                        try:
+                                            send_pixel_event("LeadSubmitted", phone=phone, currency="IDR",
+                                                              event_id=f"lead_{phone}_{int(datetime.now().timestamp())}",
+                                                              content_name=referral.get("headline", "CTWA Raihmimpi"),
+                                                              ctwa_clid=ctwa_clid)
+                                        except Exception as pe:
+                                            logger.error(f"Pixel Lead event gagal: {pe}")
 
                             # Handle klik tombol Menu Utama
                             if button_reply_id == "btn_donasi":
