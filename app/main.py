@@ -606,14 +606,54 @@ def wa_flow_endpoint():
     try:
         body = request.get_json()
         logger.info(f"RAW BODY KEYS: {list(body.keys()) if body else 'None'}")
-        if "encrypted_aes_key" in body:
+
+        if body and "encrypted_aes_key" in body:
             decrypted_body, aes_key, iv = decrypt_request(body)
             response_data = handle_flow_request(decrypted_body)
             encrypted_response = encrypt_response(response_data, aes_key, iv)
             return Response(encrypted_response, mimetype="text/plain")
-        else:
-            response_data = handle_flow_request(body)
-            return jsonify(response_data)
+
+        if body and "entry" in body:
+            try:
+                for entry in body.get("entry", []):
+                    for change in entry.get("changes", []):
+                        value = change.get("value", {})
+                        messages = value.get("messages", [])
+                        contacts_meta = value.get("contacts", [])
+                        for msg in messages:
+                            phone = msg.get("from")
+                            if not phone:
+                                continue
+                            msg_type = msg.get("type", "text")
+                            if msg_type == "text":
+                                text = msg.get("text", {}).get("body", "")
+                            elif msg_type == "interactive":
+                                interactive = msg.get("interactive", {})
+                                text = json.dumps(interactive)[:500]
+                            else:
+                                text = f"[{msg_type.upper()}]"
+
+                            contact_name = None
+                            for c in contacts_meta:
+                                if c.get("wa_id") == phone:
+                                    contact_name = c.get("profile", {}).get("name")
+
+                            logger.info(f"WA WEBHOOK MSG from={phone} type={msg_type} text={text}")
+                            record_incoming_message(phone, text, msg_type="text" if msg_type == "text" else msg_type, name=contact_name)
+
+                            text_lower = (text or "").lower()
+                            if msg_type == "text" and any(kw in text_lower for kw in DONASI_KEYWORDS):
+                                try:
+                                    send_wa_flow_message(phone)
+                                    logger.info(f"Flow donasi dikirim ke {phone} (keyword match)")
+                                except Exception as fe:
+                                    logger.error(f"Gagal kirim Flow ke {phone}: {fe}", exc_info=True)
+            except Exception as we:
+                logger.error(f"Error parsing webhook entry: {we}", exc_info=True)
+            return jsonify({"status": "ok"}), 200
+
+        response_data = handle_flow_request(body)
+        return jsonify(response_data)
     except Exception as e:
         logger.error(f"Error wa-flow: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
