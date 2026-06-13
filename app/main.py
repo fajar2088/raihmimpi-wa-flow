@@ -176,16 +176,21 @@ def format_campaigns_with_images(campaigns, limit=5, tipe_donasi=""):
     return result
 
 def create_midtrans_payment(order_id, amount, donatur_name, phone, campaign_name):
-    import base64 as b64
+    import base64 as b64, re
     auth = b64.b64encode(f"{MIDTRANS_SERVER_KEY}:".encode()).decode()
+    # Sanitize: Midtrans tidak terima beberapa karakter khusus di item.name
+    safe_campaign = re.sub(r"[^A-Za-z0-9 \-]", "", campaign_name)[:40]
+    safe_donatur = re.sub(r"[^A-Za-z0-9 ]", "", donatur_name)[:60] or "Donatur"
     payload = {
         "transaction_details": {"order_id": order_id, "gross_amount": int(amount)},
-        "customer_details": {"first_name": donatur_name, "phone": phone},
-        "item_details": [{"id": "DONASI-001", "price": int(amount), "quantity": 1, "name": f"Donasi: {campaign_name[:50]}"}],
+        "customer_details": {"first_name": safe_donatur, "phone": phone},
+        "item_details": [{"id": "DONASI", "price": int(amount), "quantity": 1, "name": f"Donasi {safe_campaign}"[:50]}],
         "callbacks": {"finish": f"https://raihmimpi.id/donasi-sukses?order_id={order_id}"}
     }
+    logger.info(f"Midtrans PAYLOAD: {json.dumps(payload)}")
     resp = requests.post(MIDTRANS_BASE_URL, json=payload,
         headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"}, timeout=15)
+    logger.info(f"Midtrans RESPONSE status={resp.status_code} body={resp.text[:500]}")
     resp.raise_for_status()
     return resp.json().get("redirect_url")
 
