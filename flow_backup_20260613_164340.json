@@ -1,0 +1,4 @@
+cd "/Users/fajarnugraha/Documents/2023/1. RAIHMIMPI/CODE INTEGRASI META AI/raihmimpi-wa-flow"
+  date_now=$(date +%Y%m%d_%H%M%S)
+  pbpaste > "flow_backup_${date_now}.json"
+  ls -la flow_backup_*.json

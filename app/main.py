@@ -503,22 +503,43 @@ def handle_flow_request(decrypted_body):
 
     if action == "data_exchange":
         if screen == "PILIH_KAMPANYE":
-            kampanye_id = str(data.get("kampanye_id", ""))
-            kampanye_nama = str(data.get("kampanye_nama", ""))
             tipe_donasi = str(data.get("tipe_donasi", "sekali"))
-            logger.info(f"PILIH_KAMPANYE: id={kampanye_id} nama={kampanye_nama}")
-            if kampanye_id and not kampanye_id.startswith("${"):
-                # User sudah pilih kampanye -> return PILIH_NOMINAL
+            # NavigationList Flow 7.x kirim ID item yang diklik via field nama NavigationList
+            # (field "kampanye_nav") atau langsung sebagai field "id"
+            kampanye_id = ""
+            for key in ["kampanye_nav", "id", "selected_id"]:
+                val = data.get(key)
+                if isinstance(val, list) and val:
+                    kampanye_id = str(val[0])
+                    break
+                elif isinstance(val, str) and val and not val.startswith("${"):
+                    kampanye_id = val
+                    break
+
+            logger.info(f"PILIH_KAMPANYE: data_keys={list(data.keys())} kampanye_id={kampanye_id} tipe={tipe_donasi}")
+
+            if kampanye_id:
+                # User pilih kampanye -> fetch nama dari API berdasarkan ID
+                kampanye_nama = "Kampanye Raihmimpi"
+                try:
+                    campaigns = get_campaigns(full=True)
+                    for c in campaigns:
+                        if str(c.get("ID_CAMPAIGN", "")) == kampanye_id:
+                            kampanye_nama = c.get("CAMPAIGN_NAME", "Kampanye Raihmimpi")
+                            break
+                except Exception as e:
+                    logger.error(f"Error fetch nama kampanye: {e}")
+                logger.info(f"PILIH_KAMPANYE resolved: id={kampanye_id} nama={kampanye_nama}")
                 return {"screen": "PILIH_NOMINAL", "data": {
                     "tipe_donasi": tipe_donasi,
                     "kampanye_id": kampanye_id,
                     "kampanye_nama": kampanye_nama,
                 }}
             else:
-                # Belum ada kampanye dipilih -> return list kampanye
+                # Belum ada kampanye dipilih -> return list kampanye (fallback, biasanya tidak terjadi)
                 campaigns = get_campaigns(full=True)
                 return {"screen": "PILIH_KAMPANYE", "data": {
-                    "kampanye_list": format_campaigns_with_images(campaigns),
+                    "kampanye_list": format_campaigns_with_images(campaigns, tipe_donasi=tipe_donasi),
                     "tipe_donasi": tipe_donasi
                 }}
 
