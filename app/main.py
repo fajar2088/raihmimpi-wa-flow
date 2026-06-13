@@ -27,6 +27,7 @@ FLOW_PRIVATE_KEY_PEM = os.environ.get("FLOW_PRIVATE_KEY", "")
 # Meta Pixel / Conversions API (Raihmimpi)
 META_PIXEL_ID = os.environ.get("META_PIXEL_ID", "404823950728687")
 META_PIXEL_ACCESS_TOKEN = os.environ.get("META_PIXEL_ACCESS_TOKEN", "")
+META_PAGE_ID = os.environ.get("META_PAGE_ID", "")
 
 MIDTRANS_BASE_URL = (
     "https://app.midtrans.com/snap/v1/transactions"
@@ -356,17 +357,20 @@ def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_i
     if content_ids:
         custom_data["content_ids"] = content_ids
 
-    payload = {
-        "data": [{
-            "event_name": event_name,
-            "event_time": int(time.time()),
-            "event_id": event_id or str(uuid.uuid4()),
-            "action_source": "business_messaging",
-            "messaging_channel": "whatsapp",
-            "user_data": user_data,
-            "custom_data": custom_data,
-        }]
+    event_data = {
+        "event_name": event_name,
+        "event_time": int(time.time()),
+        "event_id": event_id or str(uuid.uuid4()),
+        "action_source": "business_messaging",
+        "messaging_channel": "whatsapp",
+        "user_data": user_data,
+        "custom_data": custom_data,
     }
+    # page_id wajib untuk action_source=business_messaging
+    if META_PAGE_ID:
+        event_data["page_id"] = META_PAGE_ID
+
+    payload = {"data": [event_data]}
 
     try:
         resp = requests.post(
