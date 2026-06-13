@@ -311,6 +311,23 @@ def hash_sha256(value):
         return None
     return hashlib.sha256(str(value).strip().lower().encode("utf-8")).hexdigest()
 
+def get_ctwa_for_phone(phone):
+    """Lookup ctwa_clid yang tersimpan di inbox contact berdasarkan phone.
+    Return ctwa_clid string atau None."""
+    if not phone:
+        return None
+    try:
+        clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        inbox = load_inbox()
+        contact = inbox.get("contacts", {}).get(clean, {})
+        clid = contact.get("ctwa_clid", "")
+        # Validasi: minimal 50 char dan bukan test
+        if clid and len(clid) >= 50 and not clid.startswith("test_") and not clid.startswith("clid_test"):
+            return clid
+    except Exception as e:
+        logger.error(f"get_ctwa_for_phone error: {e}")
+    return None
+
 def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_id=None,
                       content_name=None, content_ids=None, source_url=None, ctwa_clid=None):
     """
@@ -490,7 +507,9 @@ def handle_flow_request(decrypted_body):
         campaigns = get_campaigns(full=True)
         phone_init = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
         send_pixel_event("ViewContent", phone=phone_init, currency="IDR",
-                          content_name="Donasi via WA Raihmimpi")
+                          event_id=f"vc_{flow_token}_{int(time.time())}",
+                          content_name="Donasi via WA Raihmimpi",
+                          ctwa_clid=get_ctwa_for_phone(phone_init))
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
     if action == "data_exchange":
@@ -564,7 +583,8 @@ def handle_flow_request(decrypted_body):
             send_pixel_event("AddToCart", phone=phone_atc, value=final_nominal, currency="IDR",
                               event_id=f"atc_{flow_token}_{kampanye_id}",
                               content_name=kampanye_nama,
-                              content_ids=[kampanye_id] if kampanye_id else None)
+                              content_ids=[kampanye_id] if kampanye_id else None,
+                              ctwa_clid=get_ctwa_for_phone(phone_atc))
 
             try:
                 nominal_lain_int = int(nominal_lain) if nominal_lain else 0
@@ -858,7 +878,8 @@ def midtrans_callback():
             notify_telegram(f"✅ <b>LUNAS!</b>\n👤 {donatur} ({phone})\n📋 {kampanye}\n💰 {format_rupiah(nominal)}\n🆔 {order_id}")
             send_pixel_event("Purchase", phone=phone, value=nominal, currency="IDR",
                               event_id=f"purchase_{order_id}", content_name=kampanye,
-                              content_ids=[kampanye_id] if kampanye_id else None)
+                              content_ids=[kampanye_id] if kampanye_id else None,
+                              ctwa_clid=get_ctwa_for_phone(phone))
         return jsonify({"status": "ok"})
     except Exception as e:
         logger.error(f"Error midtrans-callback: {e}", exc_info=True)
@@ -911,7 +932,8 @@ def _send_lunas_notif(t, order_id, source="sync"):
         notify_telegram(msg_tg)
         send_pixel_event("Purchase", phone=t["phone"], value=t.get("nominal",0), currency="IDR",
                           event_id=f"purchase_{order_id}", content_name=t.get("kampanye",""),
-                          content_ids=[t.get("kampanye_id")] if t.get("kampanye_id") else None)
+                          content_ids=[t.get("kampanye_id")] if t.get("kampanye_id") else None,
+                          ctwa_clid=get_ctwa_for_phone(t["phone"]))
     except Exception as e:
         logger.error(f"_send_lunas_notif error {order_id}: {e}")
 
