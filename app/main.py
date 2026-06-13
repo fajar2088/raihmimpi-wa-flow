@@ -340,6 +340,12 @@ def send_pixel_event(event_name, phone=None, value=None, currency="IDR", event_i
         logger.warning(f"send_pixel_event SKIP (no META_PIXEL_ACCESS_TOKEN): {event_name}")
         return None
 
+    # Skip kalau business_messaging tapi tidak ada ctwa_clid (Meta akan reject 400)
+    # Donatur non-CTWA (organic/manual) tidak punya ctwa_clid, attribution tidak applicable
+    if not ctwa_clid:
+        logger.info(f"send_pixel_event SKIP (no ctwa_clid, non-CTWA traffic): {event_name} phone={phone}")
+        return None
+
     user_data = {}
     if phone:
         # Normalisasi: pastikan format 62xxxxxxxxxx tanpa '+'
