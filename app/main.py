@@ -157,6 +157,47 @@ def send_wa_message(to_phone, message):
     logger.info(f"send_wa_message to={to_phone} status={resp.status_code} body={resp.text[:200]}")
     return resp
 
+def send_wa_buttons(to_phone, body_text, buttons):
+    """Kirim interactive reply button message via Graph API.
+    buttons: list of {"id": "...", "title": "..."} (max 3, title max 20 char)"""
+    url = f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body_text},
+            "action": {
+                "buttons": [
+                    {"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}}
+                    for b in buttons
+                ]
+            }
+        }
+    }
+    resp = requests.post(url, json=payload,
+        headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"}, timeout=10)
+    logger.info(f"send_wa_buttons to={to_phone} status={resp.status_code} body={resp.text[:200]}")
+    return resp
+
+def send_menu_utama(to_phone):
+    """Kirim pesan Menu Utama (sapaan + tombol aksi) ke kontak baru."""
+    settings = load_settings()
+    menu = settings.get("menu_utama", {})
+    message = menu.get("message", "Halo! Yuk donasi via Raihmimpi.")
+    buttons_cfg = menu.get("buttons", [])
+    buttons = []
+    for b in buttons_cfg:
+        if not b.get("enabled"):
+            continue
+        action = b.get("action", "donasi")
+        btn_id = "btn_donasi" if action == "donasi" else "btn_admin"
+        buttons.append({"id": btn_id, "title": b.get("label", "")})
+    if not buttons:
+        buttons = [{"id": "btn_donasi", "title": "Mulai Donasi"}]
+    return send_wa_buttons(to_phone, message, buttons[:3])
+
 # ID Flow donasi (didapat dari WhatsApp Manager > Flows)
 DONASI_FLOW_ID = os.environ.get("DONASI_FLOW_ID", "")
 
@@ -625,11 +666,16 @@ def wa_flow_endpoint():
                             if not phone:
                                 continue
                             msg_type = msg.get("type", "text")
+                            button_reply_id = None
                             if msg_type == "text":
                                 text = msg.get("text", {}).get("body", "")
                             elif msg_type == "interactive":
                                 interactive = msg.get("interactive", {})
-                                text = json.dumps(interactive)[:500]
+                                if interactive.get("type") == "button_reply":
+                                    button_reply_id = interactive.get("button_reply", {}).get("id")
+                                    text = interactive.get("button_reply", {}).get("title", "")
+                                else:
+                                    text = json.dumps(interactive)[:500]
                             else:
                                 text = f"[{msg_type.upper()}]"
 
@@ -638,8 +684,31 @@ def wa_flow_endpoint():
                                 if c.get("wa_id") == phone:
                                     contact_name = c.get("profile", {}).get("name")
 
-                            logger.info(f"WA WEBHOOK MSG from={phone} type={msg_type} text={text}")
+                            logger.info(f"WA WEBHOOK MSG from={phone} type={msg_type} button_id={button_reply_id} text={text}")
+
+                            inbox_before = load_inbox()
+                            existing_contact = inbox_before.get("contacts", {}).get(phone)
+
                             record_incoming_message(phone, text, msg_type="text" if msg_type == "text" else msg_type, name=contact_name)
+
+                            # Handle klik tombol Menu Utama
+                            if button_reply_id == "btn_donasi":
+                                try:
+                                    send_wa_flow_message(phone)
+                                    logger.info(f"Flow donasi dikirim ke {phone} (klik tombol Mulai Donasi)")
+                                except Exception as fe:
+                                    logger.error(f"Gagal kirim Flow ke {phone}: {fe}", exc_info=True)
+                                continue
+                            elif button_reply_id == "btn_admin":
+                                try:
+                                    send_wa_message(phone, "Admin akan segera membalas pesan Anda. Mohon tunggu sebentar 🙏")
+                                    inbox = load_inbox()
+                                    inbox["contacts"][phone]["status"] = "perlu_dibalas"
+                                    save_inbox(inbox)
+                                    logger.info(f"Notifikasi admin dikirim ke {phone}")
+                                except Exception as ae:
+                                    logger.error(f"Gagal proses btn_admin untuk {phone}: {ae}", exc_info=True)
+                                continue
 
                             text_lower = (text or "").lower()
                             if msg_type == "text" and any(kw in text_lower for kw in DONASI_KEYWORDS):
@@ -648,6 +717,22 @@ def wa_flow_endpoint():
                                     logger.info(f"Flow donasi dikirim ke {phone} (keyword match)")
                                 except Exception as fe:
                                     logger.error(f"Gagal kirim Flow ke {phone}: {fe}", exc_info=True)
+                                continue
+
+                            # Kirim Menu Utama jika pesan masuk pertama & belum di-resolve
+                            if msg_type == "text":
+                                is_new_contact = existing_contact is None
+                                already_resolved = existing_contact and existing_contact.get("status") == "selesai"
+                                menu_already_sent = existing_contact and existing_contact.get("menu_sent")
+                                if (is_new_contact or not already_resolved) and not menu_already_sent:
+                                    try:
+                                        send_menu_utama(phone)
+                                        inbox = load_inbox()
+                                        inbox["contacts"][phone]["menu_sent"] = True
+                                        save_inbox(inbox)
+                                        logger.info(f"Menu Utama dikirim ke {phone}")
+                                    except Exception as me:
+                                        logger.error(f"Gagal kirim Menu Utama ke {phone}: {me}", exc_info=True)
             except Exception as we:
                 logger.error(f"Error parsing webhook entry: {we}", exc_info=True)
             return jsonify({"status": "ok"}), 200
