@@ -1845,62 +1845,76 @@ async function editContactLabel(phone) {
   overlay.id = "labelModal";
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;";
 
-  function renderModal() {
-    const chipsHtml = allLabels.map(l => {
-      const isSelected = selected.has(l.name);
-      const bg = isSelected ? (l.bg_color || "#5b3df0") : "#f3f4f6";
-      const color = isSelected ? (l.text_color || "#fff") : "#374151";
-      const border = isSelected ? "none" : "1px solid #e5e7eb";
-      return `<div onclick="toggleLabelChip(this,'${l.name.replace(/'/g,"\'")}','${l.bg_color||"#5b3df0"}','${l.text_color||"#fff"}')"
-        data-label="${l.name.replace(/"/g,'&quot;')}"
-        style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;background:${bg};color:${color};border:${border};margin:4px;transition:all .15s;">
-        ${isSelected ? '<span style="background:#fff;color:'+( l.bg_color||"#5b3df0")+';border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">✕</span>' : ''}
-        ${l.name.replace(/</g,"&lt;")}
-      </div>`;
-    }).join("");
+  let searchQuery = "";
 
+  function renderModal() {
     const selectedChipsHtml = [...selected].map(s => {
       const lab = allLabels.find(l => l.name === s);
       const bg = lab ? (lab.bg_color || "#5b3df0") : "#5b3df0";
       const color = lab ? (lab.text_color || "#fff") : "#fff";
-      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;background:${bg};color:${color};font-size:12px;font-weight:600;margin:2px;">
+      return `<span data-chip="${s.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;background:${bg};color:${color};font-size:12px;font-weight:600;">
         ${s.replace(/</g,"&lt;")}
-        <span onclick="removeLabelChip('${s.replace(/'/g,"\'")}',this)" style="cursor:pointer;opacity:.8;font-size:11px;">✕</span>
+        <span onclick="removeLabelChip('${s.replace(/'/g,"\'")}'" style="cursor:pointer;font-size:14px;line-height:1;margin-left:2px;">×</span>
       </span>`;
     }).join("");
 
+    const filtered = allLabels.filter(l =>
+      !searchQuery || l.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const listHtml = filtered.map(l => {
+      const isSelected = selected.has(l.name);
+      const bg = l.bg_color || "#5b3df0";
+      const color = l.text_color || "#fff";
+      return `<div onclick="toggleLabelChip('${l.name.replace(/'/g,"\'")}','${bg}','${color}')"
+        style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:14px;transition:background .1s;"
+        onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="width:12px;height:12px;border-radius:50%;background:${bg};flex-shrink:0;"></span>
+          <span>${l.name.replace(/</g,"&lt;")}</span>
+        </div>
+        ${isSelected ? `<span style="color:#5b3df0;font-weight:700;font-size:16px;">✓</span>` : ""}
+      </div>`;
+    }).join("") || `<div style="padding:16px;text-align:center;color:#9ca3af;font-size:13px;">Tidak ada label. Buat di WhatsApp → Label Kontak.</div>`;
+
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:16px;width:480px;max-width:90vw;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-        <div style="background:#5b3df0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="background:#fff;border-radius:16px;width:480px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+        <div style="background:#5b3df0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
           <span style="color:#fff;font-weight:700;font-size:16px;">🏷 Contact Label</span>
-          <span onclick="closeLabelModal()" style="color:#fff;cursor:pointer;font-size:20px;line-height:1;">✕</span>
+          <span onclick="closeLabelModal()" style="color:#fff;cursor:pointer;font-size:22px;line-height:1;">✕</span>
         </div>
-        <div style="padding:20px;">
-          <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">Label terpilih:</div>
-          <div id="selectedChipsArea" style="min-height:36px;border:1px solid #e5e7eb;border-radius:8px;padding:6px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px;">
-            ${selectedChipsHtml || '<span style="color:#9ca3af;font-size:13px;padding:4px;">Belum ada label dipilih</span>'}
-          </div>
-          <div style="font-size:13px;color:#6b7280;margin-bottom:10px;">Pilih label:</div>
-          <div style="display:flex;flex-wrap:wrap;gap:2px;min-height:60px;">
-            ${chipsHtml || '<span style="color:#9ca3af;font-size:13px;">Belum ada label. Buat di menu WhatsApp → Label Kontak.</span>'}
+        <div style="padding:14px 16px;border-bottom:1px solid #f3f4f6;flex-shrink:0;">
+          <div style="border:1.5px solid #5b3df0;border-radius:8px;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:42px;cursor:text;" onclick="document.getElementById('labelSearch').focus()">
+            ${selectedChipsHtml}
+            <input id="labelSearch" placeholder="${selected.size ? '' : 'Pilih Contact Label'}" value="${searchQuery}"
+              oninput="window._labelSearch(this.value)"
+              style="border:none;outline:none;font-size:13px;flex:1;min-width:80px;background:transparent;color:#374151;">
           </div>
         </div>
-        <div style="padding:16px 20px;border-top:1px solid #f3f4f6;display:flex;gap:10px;justify-content:flex-end;">
-          <button onclick="closeLabelModal()" style="padding:10px 20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:14px;">Batal</button>
-          <button onclick="saveLabelModal('${phone}')" style="padding:10px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">Simpan</button>
+        <div style="overflow-y:auto;flex:1;max-height:320px;">
+          ${listHtml}
+        </div>
+        <div style="padding:14px 16px;border-top:1px solid #f3f4f6;flex-shrink:0;">
+          <button onclick="saveLabelModal('${phone}')" style="width:100%;padding:12px;background:#5b3df0;color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;">Simpan</button>
         </div>
       </div>
     `;
+    const inp = document.getElementById("labelSearch");
+    if (inp) inp.focus();
   }
 
   window._labelSelected = selected;
   window._labelAllLabels = allLabels;
-  window.toggleLabelChip = function(el, name, bg, color) {
+  window._labelSearch = function(val) {
+    searchQuery = val;
+    renderModal();
+  };
+  window.toggleLabelChip = function(name, bg, color) {
     if (window._labelSelected.has(name)) {
       window._labelSelected.delete(name);
     } else {
       window._labelSelected.add(name);
     }
+    searchQuery = "";
     renderModal();
   };
   window.removeLabelChip = function(name) {
