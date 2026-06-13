@@ -477,6 +477,18 @@ def handle_flow_request(decrypted_body):
             nama_donatur = data.get("nama_donatur", "Donatur")
             kampanye_id = data.get("kampanye_id", "")
             kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
+            # Fix: kalau kampanye_id atau kampanye_nama masih berupa template variable (Flow JSON lama)
+            if kampanye_id.startswith("${") or not kampanye_id:
+                kampanye_id = "unknown"
+            if kampanye_nama.startswith("${"):
+                # Fetch nama kampanye dari API berdasarkan context
+                try:
+                    kampanye_list = get_campaigns()
+                    if kampanye_list:
+                        kampanye_nama = kampanye_list[0].get("main-content", {}).get("title", "Kampanye Raihmimpi")
+                        kampanye_id = str(kampanye_list[0].get("id", "unknown"))
+                except Exception:
+                    kampanye_nama = "Kampanye Raihmimpi"
             nominal = data.get("nominal", "50000")
             nominal_lain = data.get("nominal_lain", 0)
             atas_nama = data.get("atas_nama", nama_donatur)
