@@ -97,7 +97,23 @@ def format_rupiah(amount):
     except:
         return str(amount)
 
+def filter_kampanye_aktif(campaigns):
+    """Filter kampanye berdasarkan kampanye_aktif di settings.json.
+    Kalau kosong/tidak ada, return semua (fallback default)."""
+    try:
+        settings = load_settings()
+        aktif_ids = settings.get("kampanye_aktif", [])
+        if not aktif_ids:
+            return campaigns
+        aktif_ids_str = [str(x) for x in aktif_ids]
+        filtered = [c for c in campaigns if str(c.get("ID_CAMPAIGN", "")) in aktif_ids_str]
+        return filtered if filtered else campaigns
+    except Exception as e:
+        logger.error(f"Error filter kampanye aktif: {e}")
+        return campaigns
+
 def format_campaigns_for_flow(campaigns, limit=10):
+    campaigns = filter_kampanye_aktif(campaigns)
     result = []
     for c in campaigns[:limit]:
         campaign_id = str(c.get("ID_CAMPAIGN", ""))
@@ -109,6 +125,7 @@ def format_campaigns_for_flow(campaigns, limit=10):
 
 def format_campaigns_with_images(campaigns, limit=3):
     """Format kampanye dengan gambar base64 untuk NavigationList (max 3 untuk performa)"""
+    campaigns = filter_kampanye_aktif(campaigns)
     result = []
     for c in campaigns[:limit]:
         campaign_id = str(c.get("ID_CAMPAIGN", ""))
@@ -1833,13 +1850,157 @@ loadMenuUtama();
     return Response(render_page("whatsapp", "WhatsApp", "Menu Utama dan WhatsApp Blast - sistem Raihmimpi", body), mimetype="text/html")
 
 
+@app.route("/api/kampanye-list", methods=["GET"])
+def api_kampanye_list():
+    """Return semua kampanye dari API Raihmimpi + flag aktif."""
+    campaigns = get_campaigns()
+    settings = load_settings()
+    aktif_ids = [str(x) for x in settings.get("kampanye_aktif", [])]
+    result = []
+    for c in campaigns:
+        cid = str(c.get("ID_CAMPAIGN", ""))
+        result.append({
+            "id": cid,
+            "name": c.get("CAMPAIGN_NAME", ""),
+            "image": c.get("IMG_MOBILE") or c.get("IMG_CAMPAIGNER") or c.get("IMG_BIG", ""),
+            "total_donasi": c.get("TOTAL_DONASI", 0),
+            "target": c.get("TARGET_DONASI_UANG", 0),
+            "aktif": (cid in aktif_ids) if aktif_ids else False,
+        })
+    return jsonify({"campaigns": result, "filter_active": bool(aktif_ids)})
+
+@app.route("/api/settings/kampanye-aktif", methods=["GET", "POST"])
+def api_settings_kampanye_aktif():
+    settings = load_settings()
+    if request.method == "GET":
+        return jsonify({"kampanye_aktif": settings.get("kampanye_aktif", [])})
+    body = request.get_json(silent=True) or {}
+    ids = body.get("kampanye_aktif", [])
+    if not isinstance(ids, list):
+        return jsonify({"error": "kampanye_aktif harus list"}), 400
+    settings["kampanye_aktif"] = [str(x) for x in ids]
+    save_settings(settings)
+    logger.info(f"Kampanye aktif disimpan: {len(ids)} kampanye")
+    return jsonify({"status": "ok", "kampanye_aktif": settings["kampanye_aktif"]})
+
 @app.route("/kampanye", methods=["GET"])
 def kampanye_page():
-    """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
+    """Halaman kelola kampanye yang ditampilkan di Flow donasi."""
     body = """
   <div class="panel">
-    <p style="color:#6b7280;">Halaman untuk memilih kampanye yang ditampilkan di Flow donasi sedang dalam pengembangan.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h3 style="margin:0 0 4px;">Pilih Kampanye Aktif</h3>
+        <p style="color:#6b7280;margin:0;font-size:14px;">Kampanye yang dicentang akan muncul di Flow donasi WhatsApp (max 3 yang ditampilkan dengan gambar).</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="selectAll()" style="background:#f3f4f6;color:#374151;">Pilih Semua</button>
+        <button class="btn" onclick="clearAll()" style="background:#f3f4f6;color:#374151;">Kosongkan</button>
+        <button class="btn" onclick="saveSelection()" id="btnSimpan">Simpan</button>
+      </div>
+    </div>
+    <div id="filterStatus" style="margin-bottom:16px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#92400e;font-size:14px;display:none;"></div>
+    <div id="kampanyeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+      <div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:40px;">Memuat kampanye...</div>
+    </div>
   </div>
+
+<script>
+let allCampaigns = [];
+
+function formatRupiah(n) {
+  return "Rp " + Number(n || 0).toLocaleString("id-ID");
+}
+
+async function loadKampanye() {
+  try {
+    const res = await fetch("/api/kampanye-list");
+    const json = await res.json();
+    allCampaigns = json.campaigns || [];
+    const filterStatus = document.getElementById("filterStatus");
+    if (json.filter_active) {
+      const aktifCount = allCampaigns.filter(c => c.aktif).length;
+      filterStatus.style.display = "block";
+      filterStatus.textContent = `Filter aktif: ${aktifCount} kampanye dipilih ditampilkan di Flow. Kalau kosong, semua kampanye akan ditampilkan.`;
+    } else {
+      filterStatus.style.display = "block";
+      filterStatus.textContent = "Belum ada kampanye dipilih — saat ini SEMUA kampanye ditampilkan di Flow (default).";
+    }
+    render();
+  } catch (e) {
+    document.getElementById("kampanyeGrid").innerHTML = `<div style="color:#dc2626;grid-column:1/-1;">Error: ${e.message}</div>`;
+  }
+}
+
+function render() {
+  const grid = document.getElementById("kampanyeGrid");
+  if (!allCampaigns.length) {
+    grid.innerHTML = `<div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:40px;">Tidak ada kampanye ditemukan.</div>`;
+    return;
+  }
+  grid.innerHTML = allCampaigns.map(c => {
+    const pct = c.target > 0 ? Math.min(100, Math.round(c.total_donasi / c.target * 100)) : 0;
+    return `
+      <label style="border:2px solid ${c.aktif ? '#5b3df0' : '#e5e7eb'};border-radius:10px;padding:12px;cursor:pointer;background:#fff;display:block;transition:border-color 0.15s;" onmouseover="this.style.borderColor='${c.aktif ? '#5b3df0' : '#a5b4fc'}'" onmouseout="this.style.borderColor='${c.aktif ? '#5b3df0' : '#e5e7eb'}'">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <input type="checkbox" data-id="${c.id}" ${c.aktif ? 'checked' : ''} onchange="toggleAktif('${c.id}', this.checked)" style="width:18px;height:18px;margin-top:2px;cursor:pointer;">
+          ${c.image ? `<img src="${c.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;color:#111827;margin-bottom:4px;line-height:1.3;">${(c.name || '').replace(/</g,'&lt;')}</div>
+            <div style="font-size:12px;color:#6b7280;">ID: ${c.id}</div>
+            <div style="font-size:12px;color:#374151;margin-top:4px;">${formatRupiah(c.total_donasi)} <span style="color:#9ca3af;">/ ${formatRupiah(c.target)} (${pct}%)</span></div>
+            <div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:4px;overflow:hidden;"><div style="height:100%;background:#5b3df0;width:${pct}%;"></div></div>
+          </div>
+        </div>
+      </label>
+    `;
+  }).join("");
+}
+
+function toggleAktif(id, checked) {
+  const c = allCampaigns.find(x => x.id === id);
+  if (c) c.aktif = checked;
+  render();
+}
+
+function selectAll() {
+  allCampaigns.forEach(c => c.aktif = true);
+  render();
+}
+
+function clearAll() {
+  allCampaigns.forEach(c => c.aktif = false);
+  render();
+}
+
+async function saveSelection() {
+  const btn = document.getElementById("btnSimpan");
+  btn.disabled = true;
+  btn.textContent = "Menyimpan...";
+  try {
+    const ids = allCampaigns.filter(c => c.aktif).map(c => c.id);
+    const res = await fetch("/api/settings/kampanye-aktif", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({kampanye_aktif: ids})
+    });
+    const json = await res.json();
+    if (json.status === "ok") {
+      alert(`✓ Tersimpan: ${ids.length} kampanye akan ditampilkan di Flow.`);
+      loadKampanye();
+    } else {
+      alert("Gagal: " + (json.error || "unknown"));
+    }
+  } catch (e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Simpan";
+  }
+}
+
+loadKampanye();
+</script>
 """
     return Response(render_page("kampanye", "Kelola Kampanye", "Pilih kampanye yang muncul di Flow donasi", body), mimetype="text/html")
 
