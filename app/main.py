@@ -86,7 +86,7 @@ def get_campaigns(full=False):
         logger.error(f"Error ambil kampanye: {e}")
         return []
 
-def fetch_and_resize_image(url, max_size_kb=90, target_dim=150):
+def fetch_and_resize_image(url, max_size_kb=60, target_dim=120):
     """Fetch gambar dari URL, resize, dan convert ke base64 (max ~90KB)"""
     try:
         resp = requests.get(url, timeout=8)
@@ -144,7 +144,7 @@ def format_campaigns_for_flow(campaigns, limit=10):
         result.append({"id": campaign_id, "title": name, "description": f"Terkumpul: {terkumpul} dari {target}"[:72]})
     return result
 
-def format_campaigns_with_images(campaigns, limit=3):
+def format_campaigns_with_images(campaigns, limit=5):
     """Format kampanye dengan gambar base64 untuk NavigationList (max 3 untuk performa)"""
     campaigns = filter_kampanye_aktif(campaigns)
     result = []
