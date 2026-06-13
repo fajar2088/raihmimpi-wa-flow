@@ -1828,20 +1828,105 @@ async function markResolved(phone) {
 async function editContactLabel(phone) {
   document.getElementById("contactMenuDropdown").style.display = "none";
   const current = (allContacts.find(c => c.phone === phone) || {}).labels || [];
-  const input = prompt("Label kontak (pisahkan dengan koma, contoh: VIP, donatur-rutin):", current.join(", "));
-  if (input === null) return;
-  const labels = input.split(",").map(s => s.trim()).filter(Boolean);
+
+  // Fetch daftar label dari /api/labels
+  let allLabels = [];
   try {
-    await fetch(`/api/inbox/${phone}/label`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({labels})
-    });
-    alert("✓ Label disimpan.");
-    loadContacts();
-  } catch (e) {
-    alert("Error: " + e.message);
+    const res = await fetch("/api/labels");
+    const json = await res.json();
+    allLabels = json.labels || [];
+  } catch(e) {}
+
+  // Buat selected set
+  let selected = new Set(current);
+
+  // Render modal
+  const overlay = document.createElement("div");
+  overlay.id = "labelModal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;";
+
+  function renderModal() {
+    const chipsHtml = allLabels.map(l => {
+      const isSelected = selected.has(l.name);
+      const bg = isSelected ? (l.bg_color || "#5b3df0") : "#f3f4f6";
+      const color = isSelected ? (l.text_color || "#fff") : "#374151";
+      const border = isSelected ? "none" : "1px solid #e5e7eb";
+      return `<div onclick="toggleLabelChip(this,'${l.name.replace(/'/g,"\'")}','${l.bg_color||"#5b3df0"}','${l.text_color||"#fff"}')"
+        data-label="${l.name.replace(/"/g,'&quot;')}"
+        style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;background:${bg};color:${color};border:${border};margin:4px;transition:all .15s;">
+        ${isSelected ? '<span style="background:#fff;color:'+( l.bg_color||"#5b3df0")+';border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">✕</span>' : ''}
+        ${l.name.replace(/</g,"&lt;")}
+      </div>`;
+    }).join("");
+
+    const selectedChipsHtml = [...selected].map(s => {
+      const lab = allLabels.find(l => l.name === s);
+      const bg = lab ? (lab.bg_color || "#5b3df0") : "#5b3df0";
+      const color = lab ? (lab.text_color || "#fff") : "#fff";
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;background:${bg};color:${color};font-size:12px;font-weight:600;margin:2px;">
+        ${s.replace(/</g,"&lt;")}
+        <span onclick="removeLabelChip('${s.replace(/'/g,"\'")}',this)" style="cursor:pointer;opacity:.8;font-size:11px;">✕</span>
+      </span>`;
+    }).join("");
+
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:16px;width:480px;max-width:90vw;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+        <div style="background:#5b3df0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="color:#fff;font-weight:700;font-size:16px;">🏷 Contact Label</span>
+          <span onclick="closeLabelModal()" style="color:#fff;cursor:pointer;font-size:20px;line-height:1;">✕</span>
+        </div>
+        <div style="padding:20px;">
+          <div style="font-size:13px;color:#6b7280;margin-bottom:8px;">Label terpilih:</div>
+          <div id="selectedChipsArea" style="min-height:36px;border:1px solid #e5e7eb;border-radius:8px;padding:6px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px;">
+            ${selectedChipsHtml || '<span style="color:#9ca3af;font-size:13px;padding:4px;">Belum ada label dipilih</span>'}
+          </div>
+          <div style="font-size:13px;color:#6b7280;margin-bottom:10px;">Pilih label:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:2px;min-height:60px;">
+            ${chipsHtml || '<span style="color:#9ca3af;font-size:13px;">Belum ada label. Buat di menu WhatsApp → Label Kontak.</span>'}
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid #f3f4f6;display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="closeLabelModal()" style="padding:10px 20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:14px;">Batal</button>
+          <button onclick="saveLabelModal('${phone}')" style="padding:10px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">Simpan</button>
+        </div>
+      </div>
+    `;
   }
+
+  window._labelSelected = selected;
+  window._labelAllLabels = allLabels;
+  window.toggleLabelChip = function(el, name, bg, color) {
+    if (window._labelSelected.has(name)) {
+      window._labelSelected.delete(name);
+    } else {
+      window._labelSelected.add(name);
+    }
+    renderModal();
+  };
+  window.removeLabelChip = function(name) {
+    window._labelSelected.delete(name);
+    renderModal();
+  };
+  window.closeLabelModal = function() {
+    document.body.removeChild(overlay);
+  };
+  window.saveLabelModal = async function(ph) {
+    const labels = [...window._labelSelected];
+    try {
+      await fetch("/api/inbox/" + ph + "/label", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({labels})
+      });
+      document.body.removeChild(overlay);
+      loadContacts();
+    } catch(e) {
+      alert("Error: " + e.message);
+    }
+  };
+
+  document.body.appendChild(overlay);
+  renderModal();
 }
 
 async function blokirContact(phone) {
