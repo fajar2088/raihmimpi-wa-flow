@@ -246,10 +246,6 @@
         "kampanye_nama": {
           "type": "string",
           "__example__": "DARURAT, Panti Tunanetra"
-        },
-        "show_nominal_lain": {
-          "type": "boolean",
-          "__example__": false
         }
       },
       "layout": {
@@ -293,26 +289,15 @@
                 "id": "0",
                 "title": "Nominal Lainnya"
               }
-            ],
-            "on-select-action": {
-              "name": "data_exchange",
-              "payload": {
-                "tipe_donasi": "${data.tipe_donasi}",
-                "kampanye_id": "${data.kampanye_id}",
-                "kampanye_nama": "${data.kampanye_nama}",
-                "nominal": "${form.nominal}",
-                "show_nominal_lain": "${form.nominal == \"0\"}"
-              }
-            }
+            ]
           },
           {
             "type": "TextInput",
-            "label": "Nominal Lainnya",
+            "label": "Nominal lain",
             "input-type": "number",
             "name": "nominal_lain",
             "required": false,
-            "helper-text": "Masukkan jumlah donasi Anda",
-            "visible": "${data.show_nominal_lain}"
+            "helper-text": "Isi jika pilih Nominal Lainnya"
           },
           {
             "type": "Footer",

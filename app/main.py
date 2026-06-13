@@ -444,13 +444,10 @@ def handle_flow_request(decrypted_body):
                 }}
 
         if screen == "PILIH_NOMINAL":
+            # User klik "Isi Data Donatur" -> trigger AddToCart, lanjut ke screen DATA_DONATUR
             kampanye_id = str(data.get("kampanye_id", ""))
             kampanye_nama = str(data.get("kampanye_nama", ""))
-            tipe_donasi = str(data.get("tipe_donasi", "sekali"))
-            nominal = str(data.get("nominal", ""))
-            show_nominal_lain = data.get("show_nominal_lain", False)
-
-            # Fix: kalau kampanye_nama masih template variable, fetch dari API
+            # Fix: kalau kampanye_nama masih template variable, fetch dari API berdasarkan ID
             if not kampanye_nama or kampanye_nama.startswith("${"):
                 try:
                     campaigns = get_campaigns()
@@ -462,19 +459,8 @@ def handle_flow_request(decrypted_body):
                         kampanye_nama = campaigns[0].get("main-content", {}).get("title", "Kampanye Raihmimpi") if campaigns else "Kampanye Raihmimpi"
                 except Exception:
                     kampanye_nama = "Kampanye Raihmimpi"
-            logger.info(f"PILIH_NOMINAL: kampanye_id={kampanye_id} kampanye_nama={kampanye_nama} nominal={nominal} show_nominal_lain={show_nominal_lain}")
-
-            # Kalau user pilih Nominal Lainnya (nominal == "0" atau show_nominal_lain == True)
-            # -> return screen yang sama dengan show_nominal_lain = True
-            if nominal == "0" or show_nominal_lain == True or str(show_nominal_lain).lower() == "true":
-                return {"screen": "PILIH_NOMINAL", "data": {
-                    "tipe_donasi": tipe_donasi,
-                    "kampanye_id": kampanye_id,
-                    "kampanye_nama": kampanye_nama,
-                    "show_nominal_lain": True,
-                }}
-
-            # User klik "Isi Data Donatur" -> lanjut ke DATA_DONATUR
+            logger.info(f"PILIH_NOMINAL: kampanye_id={kampanye_id} kampanye_nama={kampanye_nama}")
+            nominal = data.get("nominal", "50000")
             nominal_lain = data.get("nominal_lain", 0)
             try:
                 final_nominal = int(nominal_lain) if nominal_lain and int(nominal_lain) > 0 else int(nominal)
@@ -493,7 +479,7 @@ def handle_flow_request(decrypted_body):
                 nominal_lain_int = 0
 
             return {"screen": "DATA_DONATUR", "data": {
-                "tipe_donasi": tipe_donasi,
+                "tipe_donasi": data.get("tipe_donasi", "sekali"),
                 "kampanye_id": str(kampanye_id),
                 "kampanye_nama": str(kampanye_nama),
                 "nominal": str(nominal),
