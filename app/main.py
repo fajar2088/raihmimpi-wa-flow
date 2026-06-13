@@ -422,7 +422,7 @@ def handle_flow_request(decrypted_body):
                           content_name="Donasi via WA Raihmimpi")
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
-    if action in ("data_exchange", "navigate"):
+    if action == "data_exchange":
         if screen == "PILIH_KAMPANYE":
             kampanye_id = str(data.get("kampanye_id", ""))
             kampanye_nama = str(data.get("kampanye_nama", ""))
@@ -599,6 +599,10 @@ def handle_flow_request(decrypted_body):
                     "nominal_display": "Rp 0"
                 }}
 
+
+    if action == "navigate":
+        # Navigate ditangani client-side, backend tidak perlu override
+        return {"data": {}}
 
     campaigns = get_campaigns()
     return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
