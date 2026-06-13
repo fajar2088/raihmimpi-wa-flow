@@ -65,7 +65,7 @@ def get_campaigns():
         logger.error(f"Error ambil kampanye: {e}")
         return []
 
-def fetch_and_resize_image(url, max_size_kb=90, target_dim=150):
+def fetch_and_resize_image(url, max_size_kb=12, target_dim=80):
     """Fetch gambar dari URL, resize, dan convert ke base64 (max ~90KB)"""
     try:
         resp = requests.get(url, timeout=8)
