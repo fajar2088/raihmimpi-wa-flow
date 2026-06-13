@@ -144,8 +144,9 @@ def format_campaigns_for_flow(campaigns, limit=10):
         result.append({"id": campaign_id, "title": name, "description": f"Terkumpul: {terkumpul} dari {target}"[:72]})
     return result
 
-def format_campaigns_with_images(campaigns, limit=5):
-    """Format kampanye dengan gambar base64 untuk NavigationList (max 3 untuk performa)"""
+def format_campaigns_with_images(campaigns, limit=5, tipe_donasi=""):
+    """Format kampanye dengan gambar base64 untuk NavigationList.
+    tipe_donasi arg di-accept untuk backward compat tapi tidak dipakai (NavigationList Flow 7.x handle navigation sendiri)."""
     campaigns = filter_kampanye_aktif(campaigns)
     result = []
     for c in campaigns[:limit]:
@@ -503,6 +504,7 @@ def handle_flow_request(decrypted_body):
 
     if action == "data_exchange":
         if screen == "PILIH_KAMPANYE":
+            logger.info(f"PILIH_KAMPANYE FULL_BODY: {json.dumps(decrypted_body)[:1000]}")
             tipe_donasi = str(data.get("tipe_donasi", "sekali"))
             # NavigationList Flow 7.x kirim ID item yang diklik via field nama NavigationList
             # (field "kampanye_nav") atau langsung sebagai field "id"
