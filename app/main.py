@@ -841,6 +841,130 @@ def midtrans_callback():
         logger.error(f"Error midtrans-callback: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+def fetch_midtrans_status(order_id):
+    """Cek status transaksi dari Midtrans API Status endpoint."""
+    import base64 as b64
+    if not MIDTRANS_SERVER_KEY:
+        return {"error": "MIDTRANS_SERVER_KEY belum di-set"}
+    if "sandbox" in MIDTRANS_BASE_URL:
+        status_url = f"https://api.sandbox.midtrans.com/v2/{order_id}/status"
+    else:
+        status_url = f"https://api.midtrans.com/v2/{order_id}/status"
+    auth = b64.b64encode(f"{MIDTRANS_SERVER_KEY}:".encode()).decode()
+    try:
+        resp = requests.get(status_url, headers={"Authorization": f"Basic {auth}", "Accept": "application/json"}, timeout=15)
+        return resp.json()
+    except Exception as e:
+        logger.error(f"fetch_midtrans_status error {order_id}: {e}")
+        return {"error": str(e)}
+
+def apply_midtrans_status(transaksi_list, order_id, mt_data):
+    """Apply status Midtrans ke transaksi. Return (found, t_record, final_status, changed)."""
+    status = mt_data.get("transaction_status")
+    fraud = mt_data.get("fraud_status", "accept")
+    if not status:
+        return False, None, None, False
+    final_status = "lunas" if status in ("capture", "settlement") and fraud == "accept" else ("gagal" if status in ("cancel", "deny", "expire", "failure") else "pending")
+    for t in transaksi_list:
+        if t.get("order_id") == order_id:
+            old_status = t.get("status", "pending")
+            if old_status == final_status:
+                return True, t, final_status, False
+            t["status"] = final_status
+            if final_status == "lunas":
+                t["paid_at"] = datetime.now().isoformat()
+            t["midtrans_synced_at"] = datetime.now().isoformat()
+            return True, t, final_status, True
+    return False, None, final_status, False
+
+def _send_lunas_notif(t, order_id, source="sync"):
+    """Kirim WA + Telegram + Pixel saat transaksi jadi lunas."""
+    if not t.get("phone"):
+        return
+    try:
+        msg_wa = "✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi Anda diterima.\n\n📋 *" + str(t.get("kampanye","")) + "*\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id + "\n\nSemoga Allah melipatgandakan kebaikan Anda. 🤲\n_Raihmimpi.id_"
+        send_wa_message(t["phone"], msg_wa)
+        msg_tg = "✅ <b>LUNAS (" + source + ")!</b>\n👤 " + str(t.get("donatur","")) + " (" + str(t.get("phone","")) + ")\n📋 " + str(t.get("kampanye","")) + "\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id
+        notify_telegram(msg_tg)
+        send_pixel_event("Purchase", phone=t["phone"], value=t.get("nominal",0), currency="IDR",
+                          event_id=f"purchase_{source}_{order_id}", content_name=t.get("kampanye",""),
+                          content_ids=[t.get("kampanye_id")] if t.get("kampanye_id") else None)
+    except Exception as e:
+        logger.error(f"_send_lunas_notif error {order_id}: {e}")
+
+def sync_all_pending(source="manual"):
+    """Loop semua transaksi pending, sync dengan Midtrans."""
+    transaksi = load_data()
+    pending_list = [t for t in transaksi if t.get("status") == "pending"]
+    if not pending_list:
+        return {"total_pending": 0, "checked": 0, "changed": 0, "lunas": 0, "gagal": 0, "errors": 0, "details": []}
+    logger.info(f"sync_all_pending ({source}): {len(pending_list)} pending")
+    results = {"total_pending": len(pending_list), "checked": 0, "changed": 0, "lunas": 0, "gagal": 0, "errors": 0, "details": []}
+    any_change = False
+    for t in pending_list:
+        order_id = t.get("order_id")
+        if not order_id:
+            continue
+        results["checked"] += 1
+        mt_data = fetch_midtrans_status(order_id)
+        if mt_data.get("error") and not mt_data.get("transaction_status"):
+            results["errors"] += 1
+            results["details"].append({"order_id": order_id, "error": mt_data.get("error")})
+            continue
+        found, t_ref, final_status, changed = apply_midtrans_status(transaksi, order_id, mt_data)
+        if changed:
+            any_change = True
+            results["changed"] += 1
+            if final_status == "lunas":
+                results["lunas"] += 1
+                _send_lunas_notif(t_ref, order_id, source=source)
+            elif final_status == "gagal":
+                results["gagal"] += 1
+        results["details"].append({"order_id": order_id, "status": final_status, "changed": changed})
+    if any_change:
+        save_data(transaksi)
+    logger.info(f"sync_all_pending ({source}) done: {results['changed']} changed, {results['lunas']} lunas, {results['gagal']} gagal, {results['errors']} errors")
+    return results
+
+@app.route("/api/sync-midtrans/<order_id>", methods=["POST"])
+def api_sync_midtrans_one(order_id):
+    mt_data = fetch_midtrans_status(order_id)
+    if mt_data.get("error") and not mt_data.get("transaction_status"):
+        return jsonify({"order_id": order_id, "error": mt_data.get("error"), "midtrans_raw": mt_data}), 400
+    transaksi = load_data()
+    found, t, final_status, changed = apply_midtrans_status(transaksi, order_id, mt_data)
+    if not found:
+        return jsonify({"order_id": order_id, "error": "Transaksi tidak ditemukan", "midtrans_raw": mt_data}), 404
+    if changed:
+        save_data(transaksi)
+        logger.info(f"sync-midtrans {order_id}: {final_status} (changed)")
+        if final_status == "lunas":
+            _send_lunas_notif(t, order_id, source="manual")
+    return jsonify({"order_id": order_id, "status": final_status, "changed": changed, "midtrans_transaction_status": mt_data.get("transaction_status"), "midtrans_fraud_status": mt_data.get("fraud_status")})
+
+@app.route("/api/sync-midtrans-all", methods=["POST"])
+def api_sync_midtrans_all():
+    return jsonify(sync_all_pending(source="manual"))
+
+def _midtrans_poll_worker():
+    import time
+    time.sleep(60)
+    while True:
+        try:
+            sync_all_pending(source="auto-poll")
+        except Exception as e:
+            logger.error(f"_midtrans_poll_worker error: {e}", exc_info=True)
+        time.sleep(300)
+
+def start_midtrans_poller():
+    import threading
+    t = threading.Thread(target=_midtrans_poll_worker, daemon=True, name="midtrans-poll")
+    t.start()
+    logger.info("Midtrans auto-polling started (interval: 5 menit)")
+
+if os.environ.get("ENABLE_MIDTRANS_POLL", "1") == "1":
+    start_midtrans_poller()
+
 @app.route("/api/kampanye-source", methods=["GET"])
 def list_kampanye():
     campaigns = get_campaigns(full=True)
@@ -1382,8 +1506,9 @@ def pesanan():
           <option value="gagal">Gagal</option>
         </select>
       </div>
-      <div style="align-self:flex-end;">
+      <div style="align-self:flex-end;display:flex;gap:8px;">
         <button class="btn" onclick="loadData()">Cari</button>
+        <button class="btn" onclick="syncMidtransAll()" id="btnSyncAll" style="background:#10b981;" title="Cek manual status semua transaksi pending ke Midtrans (auto-poll tiap 5 menit di background)">Sinkron Midtrans</button>
       </div>
     </div>
     <table>
@@ -1441,6 +1566,35 @@ function render() {
     </tr>
   `).join("") || "<tr><td colspan='8' style='text-align:center;color:#9ca3af'>Tidak ada pesanan ditemukan</td></tr>";
 }
+async function syncMidtransAll() {
+  const btn = document.getElementById("btnSyncAll");
+  const pendingCount = allData.filter(t => t.status === "pending").length;
+  if (!pendingCount) {
+    alert("Tidak ada transaksi pending untuk disinkronkan.");
+    return;
+  }
+  if (!confirm(`Sinkronisasi ${pendingCount} transaksi pending dengan Midtrans?\n\nProses memakan beberapa detik per transaksi. (Sistem juga auto-poll tiap 5 menit di background.)`)) return;
+  btn.disabled = true;
+  btn.textContent = "Menyinkronkan...";
+  try {
+    const res = await fetch("/api/sync-midtrans-all", {method: "POST"});
+    const json = await res.json();
+    let msg = "Sinkronisasi selesai\n\n";
+    msg += "Total pending diperiksa: " + json.checked + "\n";
+    msg += "Berubah status: " + json.changed + "\n";
+    msg += "  - Menjadi LUNAS: " + json.lunas + "\n";
+    msg += "  - Menjadi GAGAL: " + json.gagal + "\n";
+    if (json.errors) msg += "Error: " + json.errors + "\n";
+    alert(msg);
+    loadData();
+  } catch (e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Sinkron Midtrans";
+  }
+}
+
 ['f_order','f_donatur','f_phone'].forEach(id => document.getElementById(id).addEventListener("keyup", render));
 document.getElementById("f_status").addEventListener("change", render);
 loadData();
