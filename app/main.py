@@ -474,46 +474,79 @@ def handle_flow_request(decrypted_body):
         if screen == "KONFIRMASI":
             logger.info(f"KONFIRMASI data: {data}")
             logger.info(f"KONFIRMASI flow_token: {flow_token}")
-            nama_donatur = data.get("nama_donatur", "Donatur")
-            kampanye_id = data.get("kampanye_id", "")
-            kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
-            # Fix: kalau kampanye_id atau kampanye_nama masih berupa template variable (Flow JSON lama)
-            if kampanye_id.startswith("${") or not kampanye_id:
-                kampanye_id = "unknown"
-            if kampanye_nama.startswith("${"):
-                # Fetch nama kampanye dari API berdasarkan context
+            try:
+                nama_donatur = str(data.get("nama_donatur", "Donatur"))
+                kampanye_id = str(data.get("kampanye_id", ""))
+                kampanye_nama = str(data.get("kampanye_nama", "Kampanye Raihmimpi"))
+                nominal = str(data.get("nominal", "50000"))
+                nominal_lain = data.get("nominal_lain", 0)
+                atas_nama = str(data.get("atas_nama", nama_donatur))
+                tipe = str(data.get("tipe_donasi", "sekali"))
+                logger.info(f"KONFIRMASI step1 OK: nominal={nominal} kampanye_nama={kampanye_nama}")
+
+                # Fix template variables yang tidak ter-resolve dari Flow JSON lama
+                if not kampanye_id or kampanye_id.startswith("${"):
+                    kampanye_id = "unknown"
+                if kampanye_nama.startswith("${"):
+                    try:
+                        kampanye_list = get_campaigns()
+                        if kampanye_list:
+                            kampanye_nama = kampanye_list[0].get("main-content", {}).get("title", "Kampanye Raihmimpi")
+                            kampanye_id = str(kampanye_list[0].get("id", "unknown"))
+                        logger.info(f"KONFIRMASI kampanye fetch OK: {kampanye_nama}")
+                    except Exception as e2:
+                        logger.error(f"KONFIRMASI kampanye fetch error: {e2}")
+                        kampanye_nama = "Kampanye Raihmimpi"
+
                 try:
-                    kampanye_list = get_campaigns()
-                    if kampanye_list:
-                        kampanye_nama = kampanye_list[0].get("main-content", {}).get("title", "Kampanye Raihmimpi")
-                        kampanye_id = str(kampanye_list[0].get("id", "unknown"))
-                except Exception:
-                    kampanye_nama = "Kampanye Raihmimpi"
-            nominal = data.get("nominal", "50000")
-            nominal_lain = data.get("nominal_lain", 0)
-            atas_nama = data.get("atas_nama", nama_donatur)
-            tipe = data.get("tipe_donasi", "sekali")
-            final_nominal = int(nominal_lain) if nominal_lain and int(nominal_lain) > 0 else int(nominal)
-            phone = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
-            kid_clean = str(kampanye_id)[-6:].replace('.', '').replace('}', '').replace('{', '')
-            order_id = f"RM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{kid_clean}"
-            payment_url = create_midtrans_payment(order_id, final_nominal, nama_donatur, phone, kampanye_nama)
-            transaksi = load_data()
-            transaksi.append({"order_id": order_id, "donatur": nama_donatur, "atas_nama": atas_nama, "phone": phone,
-                "kampanye_id": kampanye_id, "kampanye": kampanye_nama, "nominal": final_nominal, "tipe": tipe,
-                "status": "pending", "payment_url": payment_url, "created_at": datetime.now().isoformat()})
-            save_data(transaksi)
-            if phone:
-                send_wa_message(phone, f"Assalamu'alaikum *{nama_donatur}*! 🤲\n\nTerima kasih berniat berdonasi untuk:\n*{kampanye_nama}*\n\nNominal: *{format_rupiah(final_nominal)}*\n\nSelesaikan donasi di:\n{payment_url}\n\n_Link berlaku 24 jam. Semoga berkah._ 🙏")
-            notify_telegram(f"🔔 <b>Donasi Baru!</b>\n👤 {nama_donatur} ({phone})\n📋 {kampanye_nama}\n💰 {format_rupiah(final_nominal)}\n🆔 {order_id}")
-            nominal_display = f"Rp {final_nominal:,}".replace(",", ".")
-            return {"screen": "SELESAI", "data": {
-                "payment_url": payment_url or "",
-                "order_id": order_id,
-                "nama_donatur": nama_donatur,
-                "kampanye_nama": kampanye_nama,
-                "nominal_display": nominal_display
-            }}
+                    nominal_lain_int = int(nominal_lain) if nominal_lain else 0
+                except (ValueError, TypeError):
+                    nominal_lain_int = 0
+
+                try:
+                    final_nominal = nominal_lain_int if nominal_lain_int > 0 else int(nominal)
+                except (ValueError, TypeError):
+                    final_nominal = 50000
+
+                logger.info(f"KONFIRMASI step2 OK: final_nominal={final_nominal}")
+                phone = flow_token.replace("phone_", "") if flow_token and flow_token.startswith("phone_") else ""
+                kid_clean = kampanye_id[-6:].replace(".", "").replace("}", "").replace("{", "")
+                order_id = f"RM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{kid_clean}"
+                logger.info(f"KONFIRMASI step3 OK: order_id={order_id} phone={phone}")
+
+                payment_url = create_midtrans_payment(order_id, final_nominal, nama_donatur, phone, kampanye_nama)
+                logger.info(f"KONFIRMASI step4 OK: payment_url={payment_url[:50] if payment_url else 'None'}")
+
+                transaksi = load_data()
+                transaksi.append({"order_id": order_id, "donatur": nama_donatur, "atas_nama": atas_nama, "phone": phone,
+                    "kampanye_id": kampanye_id, "kampanye": kampanye_nama, "nominal": final_nominal, "tipe": tipe,
+                    "status": "pending", "payment_url": payment_url, "created_at": datetime.now().isoformat()})
+                save_data(transaksi)
+                logger.info("KONFIRMASI step5 OK: data saved")
+
+                if phone:
+                    send_wa_message(phone, f"Assalamu'alaikum *{nama_donatur}*! \U0001f932\n\nTerima kasih berniat berdonasi untuk:\n*{kampanye_nama}*\n\nNominal: *{format_rupiah(final_nominal)}*\n\nSelesaikan donasi di:\n{payment_url}\n\n_Link berlaku 24 jam. Semoga berkah._ \U0001f64f")
+                    logger.info(f"KONFIRMASI step6 OK: WA sent to {phone}")
+
+                notify_telegram(f"\U0001f514 <b>Donasi Baru!</b>\n\U0001f464 {nama_donatur} ({phone})\n\U0001f4cb {kampanye_nama}\n\U0001f4b0 {format_rupiah(final_nominal)}\n\U0001f194 {order_id}")
+                nominal_display = f"Rp {final_nominal:,}".replace(",", ".")
+                return {"screen": "SELESAI", "data": {
+                    "payment_url": payment_url or "",
+                    "order_id": order_id,
+                    "nama_donatur": nama_donatur,
+                    "kampanye_nama": kampanye_nama,
+                    "nominal_display": nominal_display
+                }}
+            except Exception as e:
+                logger.error(f"KONFIRMASI handler FATAL ERROR: {e}", exc_info=True)
+                return {"screen": "SELESAI", "data": {
+                    "payment_url": "",
+                    "order_id": "ERROR-" + datetime.now().strftime("%H%M%S"),
+                    "nama_donatur": "Donatur",
+                    "kampanye_nama": "Kampanye Raihmimpi",
+                    "nominal_display": "Rp 0"
+                }}
+
 
     return {"screen": "PILIH_TIPE", "data": {}}
 
