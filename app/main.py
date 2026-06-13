@@ -1122,7 +1122,10 @@ def halosis_webhook():
             # Kirim Pixel event Lead (kontak baru dari ad masuk = qualified lead)
             # Cek via ctwa_clid lama (bukan is_new_contact, karena record_incoming_message sudah create contact)
             had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
-            if not had_ctwa_before:
+            # Validasi: ctwa_clid asli dari Meta biasanya ~80+ char base64-like
+            # Skip kalau format tidak valid (testing/manual curl)
+            is_valid_clid = ctwa_clid and len(ctwa_clid) >= 50 and not ctwa_clid.startswith("clid_test") and not ctwa_clid.startswith("test_")
+            if not had_ctwa_before and is_valid_clid:
                 try:
                     send_pixel_event("LeadSubmitted", phone=clean_phone, currency="IDR",
                                       event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
@@ -1130,6 +1133,8 @@ def halosis_webhook():
                                       ctwa_clid=ctwa_clid)
                 except Exception as pe:
                     logger.error(f"Pixel Lead event gagal: {pe}")
+            elif not had_ctwa_before:
+                logger.info(f"Skip Pixel LeadSubmitted (ctwa_clid tidak valid/testing): {ctwa_clid[:30] if ctwa_clid else 'None'}")
 
         text_lower = (text or "").lower()
 
