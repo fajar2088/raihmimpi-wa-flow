@@ -1858,12 +1858,44 @@ async function openChat(phone) {
   `;
 
   const msgEl = document.getElementById("chatMessages");
-  msgEl.innerHTML = messages.map(m => `
-    <div class="chat-bubble ${m.direction}">
-      <div>${(m.text || "").replace(/</g,"&lt;")}</div>
-      <div class="chat-bubble-time">${formatTime(m.timestamp)}</div>
-    </div>
-  `).join("") || `<div class="chat-empty">Belum ada pesan</div>`;
+
+  // Render ad referral card jika kontak datang dari CTWA ad
+  let referralCardHtml = "";
+  if (contact.ad_headline || contact.ad_source_url) {
+    const adImg = contact.ad_thumbnail || contact.ad_image || "";
+    const adHeadline = (contact.ad_headline || "Iklan Raihmimpi").replace(/</g,"&lt;");
+    const adBody = (contact.ad_body || "").replace(/</g,"&lt;");
+    const adUrl = contact.ad_source_url || "";
+    referralCardHtml = `
+      <div style="background:#f3f4f6;border-left:4px solid #5b3df0;border-radius:8px;padding:10px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;max-width:75%;">
+        ${adImg ? `<img src="${adImg}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : `<div style="width:64px;height:64px;background:#e5e7eb;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;">📢</div>`}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;color:#5b3df0;font-size:13px;margin-bottom:2px;">${adHeadline}</div>
+          ${adBody ? `<div style="font-size:12px;color:#6b7280;line-height:1.3;margin-bottom:4px;">${adBody.substring(0,100)}</div>` : ""}
+          ${adUrl ? `<a href="${adUrl}" target="_blank" style="font-size:11px;color:#5b3df0;text-decoration:none;word-break:break-all;">${adUrl.substring(0,50)}${adUrl.length > 50 ? "..." : ""}</a>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  // Render messages - handle interactive (with buttons) dan text biasa
+  const messagesHtml = messages.map(m => {
+    const text = (m.text || "").replace(/</g,"&lt;").replace(/\n/g,"<br>");
+    const buttons = (m.buttons && m.buttons.length) ? `
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+        ${m.buttons.map(b => `<div style="padding:8px 12px;border:1px solid #5b3df0;border-radius:20px;text-align:center;color:#5b3df0;font-size:13px;font-weight:500;">${b.replace(/</g,"&lt;")}</div>`).join("")}
+      </div>
+    ` : "";
+    return `
+      <div class="chat-bubble ${m.direction}">
+        <div>${text}</div>
+        ${buttons}
+        <div class="chat-bubble-time">${formatTime(m.timestamp)}</div>
+      </div>
+    `;
+  }).join("");
+
+  msgEl.innerHTML = referralCardHtml + (messagesHtml || `<div class="chat-empty">Belum ada pesan</div>`);
   msgEl.scrollTop = msgEl.scrollHeight;
 
   // refresh list (unread sudah ke-reset di server)
