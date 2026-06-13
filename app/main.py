@@ -968,6 +968,29 @@ def api_inbox_label(phone):
     save_inbox(inbox)
     return jsonify(contact)
 
+@app.route("/api/inbox/<phone>/reset-menu", methods=["POST"])
+def api_inbox_reset_menu(phone):
+    inbox = load_inbox()
+    contact = inbox.get("contacts", {}).get(phone)
+    if not contact:
+        return jsonify({"error": "contact not found"}), 404
+    contact["menu_sent"] = False
+    save_inbox(inbox)
+    logger.info(f"menu_sent direset untuk {phone}")
+    return jsonify({"status": "ok", "phone": phone})
+
+@app.route("/api/inbox/reset-menu-all", methods=["POST"])
+def api_inbox_reset_menu_all():
+    inbox = load_inbox()
+    count = 0
+    for phone, contact in inbox.get("contacts", {}).items():
+        if contact.get("menu_sent"):
+            contact["menu_sent"] = False
+            count += 1
+    save_inbox(inbox)
+    logger.info(f"menu_sent direset untuk {count} kontak")
+    return jsonify({"status": "ok", "reset_count": count})
+
 @app.route("/api/settings/menu-utama", methods=["GET"])
 def api_get_menu_utama():
     settings = load_settings()
@@ -1419,6 +1442,9 @@ def chat_page():
         <div class="chat-tab active" data-status="perlu_dibalas" onclick="setTab(this)">Perlu Dibalas</div>
         <div class="chat-tab" data-status="otomatis" onclick="setTab(this)">Otomatis</div>
         <div class="chat-tab" data-status="selesai" onclick="setTab(this)">Selesai</div>
+        <div style="margin-left:auto;padding:6px 10px;">
+          <button onclick="resetMenuAll()" style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;" title="Reset flag menu_sent untuk semua kontak sehingga Menu Utama akan dikirim ulang saat pesan masuk berikutnya">↻ Reset Semua Menu</button>
+        </div>
       </div>
       <div class="chat-items" id="chatItems"></div>
     </div>
@@ -1499,9 +1525,12 @@ async function openChat(phone) {
   panel.innerHTML = `
     <div class="chat-header">
       <div class="chat-avatar">${initials(contact.name)}</div>
-      <div>
+      <div style="flex:1;">
         <div class="chat-header-name">${contact.name || contact.phone}</div>
         <div class="chat-header-phone">+${contact.phone}</div>
+      </div>
+      <div>
+        <button onclick="resetMenuContact('${contact.phone}')" style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;" title="Reset menu_sent untuk kontak ini — Menu Utama akan dikirim ulang saat pesan masuk berikutnya">↻ Reset Menu</button>
       </div>
     </div>
     <div class="chat-messages" id="chatMessages"></div>
@@ -1522,6 +1551,36 @@ async function openChat(phone) {
 
   // refresh list (unread sudah ke-reset di server)
   loadContacts();
+}
+
+async function resetMenuContact(phone) {
+  if (!confirm("Reset Menu Otomatis untuk kontak ini? Menu Utama akan dikirim ulang saat pesan masuk berikutnya.")) return;
+  try {
+    const res = await fetch(`/api/inbox/${phone}/reset-menu`, {method:"POST"});
+    const json = await res.json();
+    if (json.status === "ok") {
+      alert("✓ Menu Otomatis sudah direset untuk kontak ini.");
+    } else {
+      alert("Gagal: " + (json.error || "unknown"));
+    }
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function resetMenuAll() {
+  if (!confirm("Reset Menu Otomatis untuk SEMUA kontak? Menu Utama akan dikirim ulang ke semua kontak saat mereka kirim pesan berikutnya.")) return;
+  try {
+    const res = await fetch(`/api/inbox/reset-menu-all`, {method:"POST"});
+    const json = await res.json();
+    if (json.status === "ok") {
+      alert(`✓ Menu Otomatis sudah direset untuk ${json.reset_count} kontak.`);
+    } else {
+      alert("Gagal: " + (json.error || "unknown"));
+    }
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
 }
 
 async function sendReply() {
