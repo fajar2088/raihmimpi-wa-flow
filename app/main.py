@@ -424,20 +424,24 @@ def handle_flow_request(decrypted_body):
 
     if action == "data_exchange":
         if screen == "PILIH_KAMPANYE":
-            campaigns = get_campaigns()
-            return {"screen": "PILIH_KAMPANYE", "data": {"kampanye_list": format_campaigns_with_images(campaigns), "tipe_donasi": data.get("tipe_donasi", "sekali")}}
-
-        if screen == "PILIH_KAMPANYE":
-            # User klik kampanye di NavigationList -> return screen PILIH_NOMINAL
             kampanye_id = str(data.get("kampanye_id", ""))
-            kampanye_nama = str(data.get("kampanye_nama", "Kampanye Raihmimpi"))
+            kampanye_nama = str(data.get("kampanye_nama", ""))
             tipe_donasi = str(data.get("tipe_donasi", "sekali"))
             logger.info(f"PILIH_KAMPANYE: id={kampanye_id} nama={kampanye_nama}")
-            return {"screen": "PILIH_NOMINAL", "data": {
-                "tipe_donasi": tipe_donasi,
-                "kampanye_id": kampanye_id,
-                "kampanye_nama": kampanye_nama,
-            }}
+            if kampanye_id and not kampanye_id.startswith("${"):
+                # User sudah pilih kampanye -> return PILIH_NOMINAL
+                return {"screen": "PILIH_NOMINAL", "data": {
+                    "tipe_donasi": tipe_donasi,
+                    "kampanye_id": kampanye_id,
+                    "kampanye_nama": kampanye_nama,
+                }}
+            else:
+                # Belum ada kampanye dipilih -> return list kampanye
+                campaigns = get_campaigns()
+                return {"screen": "PILIH_KAMPANYE", "data": {
+                    "kampanye_list": format_campaigns_with_images(campaigns),
+                    "tipe_donasi": tipe_donasi
+                }}
 
         if screen == "PILIH_NOMINAL":
             # User klik "Isi Data Donatur" -> trigger AddToCart, lanjut ke screen DATA_DONATUR
