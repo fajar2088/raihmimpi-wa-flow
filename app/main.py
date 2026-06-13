@@ -1122,8 +1122,8 @@ def halosis_webhook():
             had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
             if not had_ctwa_before:
                 try:
-                    send_pixel_event("Lead", phone=clean_phone, currency="IDR",
-                                      event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
+                    send_pixel_event("Contact", phone=clean_phone, currency="IDR",
+                                      event_id=f"contact_{clean_phone}_{int(datetime.now().timestamp())}",
                                       content_name=referral.get("headline", "CTWA Raihmimpi"))
                 except Exception as pe:
                     logger.error(f"Pixel Lead event gagal: {pe}")
