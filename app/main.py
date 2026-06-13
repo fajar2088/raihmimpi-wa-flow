@@ -481,7 +481,8 @@ def handle_flow_request(decrypted_body):
             tipe = data.get("tipe_donasi", "sekali")
             final_nominal = int(nominal_lain) if nominal_lain and int(nominal_lain) > 0 else int(nominal)
             phone = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
-            order_id = f"RM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(kampanye_id)[-6:].replace(".", "").replace("}", "").replace("{", "")}"
+            kid_clean = str(kampanye_id)[-6:].replace('.', '').replace('}', '').replace('{', '')
+            order_id = f"RM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{kid_clean}"
             payment_url = create_midtrans_payment(order_id, final_nominal, nama_donatur, phone, kampanye_nama)
             transaksi = load_data()
             transaksi.append({"order_id": order_id, "donatur": nama_donatur, "atas_nama": atas_nama, "phone": phone,
