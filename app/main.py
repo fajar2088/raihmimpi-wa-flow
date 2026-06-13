@@ -506,10 +506,10 @@ def handle_flow_request(decrypted_body):
         if screen == "PILIH_KAMPANYE":
             logger.info(f"PILIH_KAMPANYE FULL_BODY: {json.dumps(decrypted_body)[:1000]}")
             tipe_donasi = str(data.get("tipe_donasi", "sekali"))
-            # NavigationList Flow 7.x kirim ID item yang diklik via field nama NavigationList
-            # (field "kampanye_nav") atau langsung sebagai field "id"
+            # NavigationList Flow 7.x kirim ID item yang diklik via ${form.kampanye_nav}
+            # yang sudah di-resolve ke field kampanye_id di payload
             kampanye_id = ""
-            for key in ["kampanye_nav", "id", "selected_id"]:
+            for key in ["kampanye_id", "kampanye_nav", "id", "selected_id"]:
                 val = data.get(key)
                 if isinstance(val, list) and val:
                     kampanye_id = str(val[0])
