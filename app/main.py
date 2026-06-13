@@ -207,7 +207,7 @@ DONASI_KEYWORDS = ["donasi", "infak", "infaq", "sedekah", "zakat", "wakaf", "ber
 def send_wa_flow_message(to_phone, body_text="Yuk mulai donasi via Raihmimpi 🤲", cta_text="Mulai Donasi", screen="PILIH_TIPE"):
     """Kirim interactive Flow message langsung ke user (dalam window 24 jam, tanpa template)."""
     url = f"https://graph.facebook.com/v19.0/{WA_PHONE_NUMBER_ID}/messages"
-    flow_token = f"phone_{to_phone}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    flow_token = f"phone_{to_phone}"
     payload = {
         "messaging_product": "whatsapp",
         "to": to_phone,
