@@ -492,12 +492,19 @@ def handle_flow_request(decrypted_body):
                 nominal_lain_val = int(data.get("nominal_lain", 0) or 0)
             except (ValueError, TypeError):
                 nominal_lain_val = 0
+            nominal_raw = str(data.get("nominal", "50000"))
+            try:
+                nominal_int = nominal_lain_val if nominal_lain_val > 0 else int(nominal_raw)
+            except (ValueError, TypeError):
+                nominal_int = 50000
+            nominal_display = f"Rp {nominal_int:,}".replace(",", ".")
             return {"screen": "KONFIRMASI", "data": {
                 "tipe_donasi": str(data.get("tipe_donasi", "sekali")),
                 "kampanye_id": str(data.get("kampanye_id", "")),
                 "kampanye_nama": str(data.get("kampanye_nama", "Kampanye Raihmimpi")),
-                "nominal": str(data.get("nominal", "50000")),
+                "nominal": nominal_raw,
                 "nominal_lain": nominal_lain_val,
+                "nominal_display": nominal_display,
                 "nama_donatur": str(data.get("nama_donatur", "Donatur")),
                 "atas_nama": str(data.get("atas_nama", "")),
             }}
