@@ -600,6 +600,9 @@ def handle_flow_request(decrypted_body):
                 }}
 
 
+    if action == "navigate":
+        return {"screen": "PILIH_TIPE", "data": {"kampanye_list": []}}
+
     campaigns = get_campaigns()
     return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
