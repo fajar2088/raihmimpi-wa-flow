@@ -423,6 +423,14 @@ def handle_flow_request(decrypted_body):
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
     if action == "data_exchange":
+        if screen == "PILIH_TIPE":
+            tipe_donasi = str(data.get("tipe_donasi", "sekali"))
+            campaigns = get_campaigns()
+            return {"screen": "PILIH_KAMPANYE", "data": {
+                "kampanye_list": format_campaigns_with_images(campaigns),
+                "tipe_donasi": tipe_donasi
+            }}
+
         if screen == "PILIH_KAMPANYE":
             kampanye_id = str(data.get("kampanye_id", ""))
             kampanye_nama = str(data.get("kampanye_nama", ""))

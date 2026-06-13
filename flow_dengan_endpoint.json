@@ -121,14 +121,10 @@
             "type": "Footer",
             "label": "Pilih Kampanye",
             "on-click-action": {
-              "name": "navigate",
-              "next": {
-                "type": "screen",
-                "name": "PILIH_KAMPANYE"
-              },
+              "name": "data_exchange",
               "payload": {
                 "tipe_donasi": "${form.tipe_donasi}",
-                "kampanye_list": "${data.kampanye_list}"
+                "trigger": "pilih_kampanye"
               }
             }
           }
