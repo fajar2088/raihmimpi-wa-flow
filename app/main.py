@@ -1573,18 +1573,13 @@ async function syncMidtransAll() {
     alert("Tidak ada transaksi pending untuk disinkronkan.");
     return;
   }
-  if (!confirm(`Sinkronisasi ${pendingCount} transaksi pending dengan Midtrans?\n\nProses memakan beberapa detik per transaksi. (Sistem juga auto-poll tiap 5 menit di background.)`)) return;
+  if (!confirm("Sinkronisasi " + pendingCount + " transaksi pending dengan Midtrans? Proses memakan beberapa detik per transaksi. (Sistem juga auto-poll tiap 5 menit di background.)")) return;
   btn.disabled = true;
   btn.textContent = "Menyinkronkan...";
   try {
     const res = await fetch("/api/sync-midtrans-all", {method: "POST"});
     const json = await res.json();
-    let msg = "Sinkronisasi selesai\n\n";
-    msg += "Total pending diperiksa: " + json.checked + "\n";
-    msg += "Berubah status: " + json.changed + "\n";
-    msg += "  - Menjadi LUNAS: " + json.lunas + "\n";
-    msg += "  - Menjadi GAGAL: " + json.gagal + "\n";
-    if (json.errors) msg += "Error: " + json.errors + "\n";
+    let msg = "Sinkronisasi selesai. Total pending diperiksa: " + json.checked + ", Berubah status: " + json.changed + ", Menjadi LUNAS: " + json.lunas + ", Menjadi GAGAL: " + json.gagal + (json.errors ? ", Error: " + json.errors : "");
     alert(msg);
     loadData();
   } catch (e) {
