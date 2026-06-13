@@ -1,5 +1,5 @@
 {
-  "version": "7.3",
+  "version": "7.1",
   "data_api_version": "3.0",
   "routing_model": {
     "PILIH_TIPE": [
@@ -215,11 +215,7 @@
             "name": "kampanye_nav",
             "list-items": "${data.kampanye_list}",
             "on-click-action": {
-              "name": "navigate",
-              "next": {
-                "type": "screen",
-                "name": "PILIH_NOMINAL"
-              },
+              "name": "data_exchange",
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${item.id}",

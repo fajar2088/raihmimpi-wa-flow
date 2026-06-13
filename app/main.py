@@ -427,6 +427,18 @@ def handle_flow_request(decrypted_body):
             campaigns = get_campaigns()
             return {"screen": "PILIH_KAMPANYE", "data": {"kampanye_list": format_campaigns_with_images(campaigns), "tipe_donasi": data.get("tipe_donasi", "sekali")}}
 
+        if screen == "PILIH_KAMPANYE":
+            # User klik kampanye di NavigationList -> return screen PILIH_NOMINAL
+            kampanye_id = str(data.get("kampanye_id", ""))
+            kampanye_nama = str(data.get("kampanye_nama", "Kampanye Raihmimpi"))
+            tipe_donasi = str(data.get("tipe_donasi", "sekali"))
+            logger.info(f"PILIH_KAMPANYE: id={kampanye_id} nama={kampanye_nama}")
+            return {"screen": "PILIH_NOMINAL", "data": {
+                "tipe_donasi": tipe_donasi,
+                "kampanye_id": kampanye_id,
+                "kampanye_nama": kampanye_nama,
+            }}
+
         if screen == "PILIH_NOMINAL":
             # User klik "Isi Data Donatur" -> trigger AddToCart, lanjut ke screen DATA_DONATUR
             kampanye_id = data.get("kampanye_id", "")
