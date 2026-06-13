@@ -1442,9 +1442,6 @@ def chat_page():
         <div class="chat-tab active" data-status="perlu_dibalas" onclick="setTab(this)">Perlu Dibalas</div>
         <div class="chat-tab" data-status="otomatis" onclick="setTab(this)">Otomatis</div>
         <div class="chat-tab" data-status="selesai" onclick="setTab(this)">Selesai</div>
-        <div style="margin-left:auto;padding:6px 10px;">
-          <button onclick="resetMenuAll()" style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;" title="Reset flag menu_sent untuk semua kontak sehingga Menu Utama akan dikirim ulang saat pesan masuk berikutnya">↻ Reset Semua Menu</button>
-        </div>
       </div>
       <div class="chat-items" id="chatItems"></div>
     </div>
@@ -1523,14 +1520,20 @@ async function openChat(phone) {
 
   const panel = document.getElementById("chatPanel");
   panel.innerHTML = `
-    <div class="chat-header">
+    <div class="chat-header" style="position:relative;">
       <div class="chat-avatar">${initials(contact.name)}</div>
       <div style="flex:1;">
         <div class="chat-header-name">${contact.name || contact.phone}</div>
         <div class="chat-header-phone">+${contact.phone}</div>
       </div>
-      <div>
-        <button onclick="resetMenuContact('${contact.phone}')" style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;" title="Reset menu_sent untuk kontak ini — Menu Utama akan dikirim ulang saat pesan masuk berikutnya">↻ Reset Menu</button>
+      <div style="position:relative;">
+        <button onclick="toggleContactMenu(event)" id="contactMenuBtn" style="background:transparent;border:1px solid #e5e7eb;color:#4b5563;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;" title="Aksi kontak">⋮</button>
+        <div id="contactMenuDropdown" style="display:none;position:absolute;right:0;top:42px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);min-width:180px;z-index:100;overflow:hidden;">
+          <div onclick="resetMenuContact('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">↻ Reset Menu</div>
+          <div onclick="markResolved('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">✓ Selesai</div>
+          <div onclick="editContactLabel('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">🏷 Contact Label</div>
+          <div onclick="blokirContact('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;color:#dc2626;display:flex;align-items:center;gap:8px;border-top:1px solid #f3f4f6;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='#fff'">⊘ Blokir</div>
+        </div>
       </div>
     </div>
     <div class="chat-messages" id="chatMessages"></div>
@@ -1553,7 +1556,21 @@ async function openChat(phone) {
   loadContacts();
 }
 
+function toggleContactMenu(e) {
+  e.stopPropagation();
+  const dd = document.getElementById("contactMenuDropdown");
+  dd.style.display = dd.style.display === "block" ? "none" : "block";
+}
+
+document.addEventListener("click", function(e) {
+  const dd = document.getElementById("contactMenuDropdown");
+  if (dd && !e.target.closest("#contactMenuBtn") && !e.target.closest("#contactMenuDropdown")) {
+    dd.style.display = "none";
+  }
+});
+
 async function resetMenuContact(phone) {
+  document.getElementById("contactMenuDropdown").style.display = "none";
   if (!confirm("Reset Menu Otomatis untuk kontak ini? Menu Utama akan dikirim ulang saat pesan masuk berikutnya.")) return;
   try {
     const res = await fetch(`/api/inbox/${phone}/reset-menu`, {method:"POST"});
@@ -1568,16 +1585,56 @@ async function resetMenuContact(phone) {
   }
 }
 
-async function resetMenuAll() {
-  if (!confirm("Reset Menu Otomatis untuk SEMUA kontak? Menu Utama akan dikirim ulang ke semua kontak saat mereka kirim pesan berikutnya.")) return;
+async function markResolved(phone) {
+  document.getElementById("contactMenuDropdown").style.display = "none";
+  if (!confirm("Tandai percakapan ini sebagai Selesai?")) return;
   try {
-    const res = await fetch(`/api/inbox/reset-menu-all`, {method:"POST"});
-    const json = await res.json();
-    if (json.status === "ok") {
-      alert(`✓ Menu Otomatis sudah direset untuk ${json.reset_count} kontak.`);
-    } else {
-      alert("Gagal: " + (json.error || "unknown"));
-    }
+    await fetch(`/api/inbox/${phone}/label`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({status: "selesai"})
+    });
+    alert("✓ Percakapan ditandai Selesai.");
+    loadContacts();
+    currentPhone = null;
+    document.getElementById("chatPanel").innerHTML = `<div class="chat-empty"><div style="font-size:40px;">💬</div><div>Pilih kontak di sebelah kiri<br>untuk memulai percakapan</div></div>`;
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function editContactLabel(phone) {
+  document.getElementById("contactMenuDropdown").style.display = "none";
+  const current = (allContacts.find(c => c.phone === phone) || {}).labels || [];
+  const input = prompt("Label kontak (pisahkan dengan koma, contoh: VIP, donatur-rutin):", current.join(", "));
+  if (input === null) return;
+  const labels = input.split(",").map(s => s.trim()).filter(Boolean);
+  try {
+    await fetch(`/api/inbox/${phone}/label`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({labels})
+    });
+    alert("✓ Label disimpan.");
+    loadContacts();
+  } catch (e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function blokirContact(phone) {
+  document.getElementById("contactMenuDropdown").style.display = "none";
+  if (!confirm("Blokir kontak ini? Pesan dari kontak ini akan diabaikan oleh sistem.")) return;
+  try {
+    await fetch(`/api/inbox/${phone}/label`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({status: "blokir"})
+    });
+    alert("✓ Kontak diblokir.");
+    loadContacts();
+    currentPhone = null;
+    document.getElementById("chatPanel").innerHTML = `<div class="chat-empty"><div style="font-size:40px;">💬</div><div>Pilih kontak di sebelah kiri<br>untuk memulai percakapan</div></div>`;
   } catch (e) {
     alert("Error: " + e.message);
   }
