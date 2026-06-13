@@ -215,7 +215,11 @@
             "name": "kampanye_nav",
             "list-items": "${data.kampanye_list}",
             "on-click-action": {
-              "name": "data_exchange",
+              "name": "navigate",
+              "next": {
+                "type": "screen",
+                "name": "PILIH_NOMINAL"
+              },
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${item.id}",

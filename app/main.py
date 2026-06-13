@@ -445,8 +445,21 @@ def handle_flow_request(decrypted_body):
 
         if screen == "PILIH_NOMINAL":
             # User klik "Isi Data Donatur" -> trigger AddToCart, lanjut ke screen DATA_DONATUR
-            kampanye_id = data.get("kampanye_id", "")
-            kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
+            kampanye_id = str(data.get("kampanye_id", ""))
+            kampanye_nama = str(data.get("kampanye_nama", ""))
+            # Fix: kalau kampanye_nama masih template variable, fetch dari API berdasarkan ID
+            if not kampanye_nama or kampanye_nama.startswith("${"):
+                try:
+                    campaigns = get_campaigns()
+                    for c in campaigns:
+                        if str(c.get("id")) == kampanye_id:
+                            kampanye_nama = c.get("main-content", {}).get("title", "Kampanye Raihmimpi")
+                            break
+                    if not kampanye_nama or kampanye_nama.startswith("${"):
+                        kampanye_nama = campaigns[0].get("main-content", {}).get("title", "Kampanye Raihmimpi") if campaigns else "Kampanye Raihmimpi"
+                except Exception:
+                    kampanye_nama = "Kampanye Raihmimpi"
+            logger.info(f"PILIH_NOMINAL: kampanye_id={kampanye_id} kampanye_nama={kampanye_nama}")
             nominal = data.get("nominal", "50000")
             nominal_lain = data.get("nominal_lain", 0)
             try:
