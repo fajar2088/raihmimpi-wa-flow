@@ -1880,7 +1880,7 @@ async function openChat(phone) {
 
   // Render messages - handle interactive (with buttons) dan text biasa
   const messagesHtml = messages.map(m => {
-    const text = (m.text || "").replace(/</g,"&lt;").split("\n").join("<br>");
+    const text = (m.text || "").replace(/</g,"&lt;").split(String.fromCharCode(10)).join("<br>");
     const buttons = (m.buttons && m.buttons.length) ? `
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
         ${m.buttons.map(b => `<div style="padding:8px 12px;border:1px solid #5b3df0;border-radius:20px;text-align:center;color:#5b3df0;font-size:13px;font-weight:500;">${b.replace(/</g,"&lt;")}</div>`).join("")}
