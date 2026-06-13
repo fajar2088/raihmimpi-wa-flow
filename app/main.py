@@ -423,14 +423,6 @@ def handle_flow_request(decrypted_body):
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
     if action == "data_exchange":
-        if screen == "PILIH_TIPE":
-            tipe_donasi = str(data.get("tipe_donasi", "sekali"))
-            campaigns = get_campaigns()
-            return {"screen": "PILIH_KAMPANYE", "data": {
-                "kampanye_list": format_campaigns_with_images(campaigns),
-                "tipe_donasi": tipe_donasi
-            }}
-
         if screen == "PILIH_KAMPANYE":
             kampanye_id = str(data.get("kampanye_id", ""))
             kampanye_nama = str(data.get("kampanye_nama", ""))
@@ -608,11 +600,7 @@ def handle_flow_request(decrypted_body):
                 }}
 
 
-    if action == "navigate":
-        return {"screen": "PILIH_TIPE", "data": {"kampanye_list": []}}
-
-    campaigns = get_campaigns()
-    return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
+    return {"screen": "PILIH_TIPE", "data": {}}
 
 @app.route("/wa-flow", methods=["GET"])
 def wa_flow_verify():
@@ -635,8 +623,6 @@ def wa_flow_endpoint():
         if "encrypted_aes_key" in body:
             decrypted_body, aes_key, iv = decrypt_request(body)
             response_data = handle_flow_request(decrypted_body)
-            if "version" not in response_data and decrypted_body.get("action") != "navigate":
-                response_data["version"] = "3.0"
             encrypted_response = encrypt_response(response_data, aes_key, iv)
             return Response(encrypted_response, mimetype="text/plain")
         else:
