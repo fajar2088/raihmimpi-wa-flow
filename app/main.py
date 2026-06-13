@@ -1659,7 +1659,7 @@ async function openChat(phone) {
   // Render ad referral card jika kontak datang dari CTWA ad
   let referralCardHtml = "";
   if (contact.ad_headline || contact.ad_source_url) {
-    const adImg = contact.ad_thumbnail || contact.ad_image || "";
+    const adImg = contact.ad_image_url || contact.ad_thumbnail_url || "";
     const adHeadline = (contact.ad_headline || "Iklan Raihmimpi").replace(/</g,"&lt;");
     const adBody = (contact.ad_body || "").replace(/</g,"&lt;");
     const adUrl = contact.ad_source_url || "";
