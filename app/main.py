@@ -495,7 +495,7 @@ def handle_flow_request(decrypted_body):
         return {"version": "3.0", "data": {"status": "active"}}
 
     if action == "INIT":
-        campaigns = get_campaigns()
+        campaigns = get_campaigns(full=True)
         phone_init = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
         send_pixel_event("ViewContent", phone=phone_init, currency="IDR",
                           content_name="Donasi via WA Raihmimpi")
@@ -516,7 +516,7 @@ def handle_flow_request(decrypted_body):
                 }}
             else:
                 # Belum ada kampanye dipilih -> return list kampanye
-                campaigns = get_campaigns()
+                campaigns = get_campaigns(full=True)
                 return {"screen": "PILIH_KAMPANYE", "data": {
                     "kampanye_list": format_campaigns_with_images(campaigns),
                     "tipe_donasi": tipe_donasi
@@ -529,7 +529,7 @@ def handle_flow_request(decrypted_body):
             # Fix: kalau kampanye_nama masih template variable, fetch dari API berdasarkan ID
             if not kampanye_nama or kampanye_nama.startswith("${"):
                 try:
-                    campaigns = get_campaigns()
+                    campaigns = get_campaigns(full=True)
                     for c in campaigns:
                         if str(c.get("id")) == kampanye_id:
                             kampanye_nama = c.get("main-content", {}).get("title", "Kampanye Raihmimpi")
@@ -606,7 +606,7 @@ def handle_flow_request(decrypted_body):
                     kampanye_id = "unknown"
                 if kampanye_nama.startswith("${"):
                     try:
-                        kampanye_list = get_campaigns()
+                        kampanye_list = get_campaigns(full=True)
                         if kampanye_list:
                             kampanye_nama = kampanye_list[0].get("main-content", {}).get("title", "Kampanye Raihmimpi")
                             kampanye_id = str(kampanye_list[0].get("id", "unknown"))
@@ -811,7 +811,7 @@ def midtrans_callback():
 
 @app.route("/api/kampanye-source", methods=["GET"])
 def list_kampanye():
-    campaigns = get_campaigns()
+    campaigns = get_campaigns(full=True)
     return jsonify({"total": len(campaigns), "formatted": format_campaigns_for_flow(campaigns)})
 
 @app.route("/", methods=["GET"])
