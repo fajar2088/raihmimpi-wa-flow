@@ -456,7 +456,7 @@ def handle_flow_request(decrypted_body):
                 "nominal_lain": nominal_lain_int,
             }}
 
-        if screen == "SELESAI":
+        if screen == "KONFIRMASI":
             nama_donatur = data.get("nama_donatur", "Donatur")
             kampanye_id = data.get("kampanye_id", "")
             kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
@@ -476,7 +476,14 @@ def handle_flow_request(decrypted_body):
             if phone:
                 send_wa_message(phone, f"Assalamu'alaikum *{nama_donatur}*! 🤲\n\nTerima kasih berniat berdonasi untuk:\n*{kampanye_nama}*\n\nNominal: *{format_rupiah(final_nominal)}*\n\nSelesaikan donasi di:\n{payment_url}\n\n_Link berlaku 24 jam. Semoga berkah._ 🙏")
             notify_telegram(f"🔔 <b>Donasi Baru!</b>\n👤 {nama_donatur} ({phone})\n📋 {kampanye_nama}\n💰 {format_rupiah(final_nominal)}\n🆔 {order_id}")
-            return {"screen": "SUCCESS", "data": {"extension_message_response": {"params": {"flow_token": flow_token}}}}
+            nominal_display = f"Rp {final_nominal:,}".replace(",", ".")
+            return {"screen": "SELESAI", "data": {
+                "payment_url": payment_url or "",
+                "order_id": order_id,
+                "nama_donatur": nama_donatur,
+                "kampanye_nama": kampanye_nama,
+                "nominal_display": nominal_display
+            }}
 
     return {"screen": "PILIH_TIPE", "data": {}}
 

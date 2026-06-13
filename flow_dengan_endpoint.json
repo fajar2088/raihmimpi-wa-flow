@@ -14,7 +14,10 @@
     "DATA_DONATUR": [
       "KONFIRMASI"
     ],
-    "KONFIRMASI": []
+    "KONFIRMASI": [
+      "SELESAI"
+    ],
+    "SELESAI": []
   },
   "screens": [
     {
@@ -404,8 +407,7 @@
     {
       "id": "KONFIRMASI",
       "title": "Konfirmasi Donasi",
-      "terminal": true,
-      "success": true,
+      "terminal": false,
       "data": {
         "tipe_donasi": {
           "type": "string",
@@ -457,7 +459,7 @@
           },
           {
             "type": "TextCaption",
-            "text": "ID Kampanye"
+            "text": "Kampanye"
           },
           {
             "type": "TextBody",
@@ -483,7 +485,7 @@
             "type": "Footer",
             "label": "Lanjut ke Pembayaran",
             "on-click-action": {
-              "name": "complete",
+              "name": "data_exchange",
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${data.kampanye_id}",
@@ -493,6 +495,63 @@
                 "nama_donatur": "${data.nama_donatur}",
                 "atas_nama": "${data.atas_nama}"
               }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELESAI",
+      "title": "Donasi Berhasil",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "payment_url": {
+          "type": "string",
+          "__example__": "https://app.midtrans.com/snap/v2/vtweb/xxx"
+        },
+        "order_id": {
+          "type": "string",
+          "__example__": "RM-20260613-1234"
+        },
+        "nama_donatur": {
+          "type": "string",
+          "__example__": "Budi Santoso"
+        },
+        "kampanye_nama": {
+          "type": "string",
+          "__example__": "DARURAT, Panti Tunanetra"
+        },
+        "nominal_display": {
+          "type": "string",
+          "__example__": "Rp 50.000"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Terima Kasih! 🤲"
+          },
+          {
+            "type": "TextBody",
+            "text": "Donasi Anda untuk ${data.kampanye_nama} sebesar ${data.nominal_display} sedang diproses."
+          },
+          {
+            "type": "TextBody",
+            "text": "Silakan selesaikan pembayaran melalui link yang telah dikirimkan ke WhatsApp Anda."
+          },
+          {
+            "type": "TextCaption",
+            "text": "Order ID: ${data.order_id}"
+          },
+          {
+            "type": "Footer",
+            "label": "Selesai",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {}
             }
           }
         ]
