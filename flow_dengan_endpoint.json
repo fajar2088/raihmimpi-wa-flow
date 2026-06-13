@@ -385,11 +385,7 @@
             "type": "Footer",
             "label": "Lihat Konfirmasi",
             "on-click-action": {
-              "name": "navigate",
-              "next": {
-                "type": "screen",
-                "name": "KONFIRMASI"
-              },
+              "name": "data_exchange",
               "payload": {
                 "tipe_donasi": "${data.tipe_donasi}",
                 "kampanye_id": "${data.kampanye_id}",

@@ -455,6 +455,22 @@ def handle_flow_request(decrypted_body):
                 "nominal_lain": nominal_lain_int,
             }}
 
+        if screen == "DATA_DONATUR":
+            # User klik Lihat Konfirmasi -> return data ke screen KONFIRMASI
+            try:
+                nominal_lain_val = int(data.get("nominal_lain", 0) or 0)
+            except (ValueError, TypeError):
+                nominal_lain_val = 0
+            return {"screen": "KONFIRMASI", "data": {
+                "tipe_donasi": str(data.get("tipe_donasi", "sekali")),
+                "kampanye_id": str(data.get("kampanye_id", "")),
+                "kampanye_nama": str(data.get("kampanye_nama", "Kampanye Raihmimpi")),
+                "nominal": str(data.get("nominal", "50000")),
+                "nominal_lain": nominal_lain_val,
+                "nama_donatur": str(data.get("nama_donatur", "Donatur")),
+                "atas_nama": str(data.get("atas_nama", "")),
+            }}
+
         if screen == "KONFIRMASI":
             nama_donatur = data.get("nama_donatur", "Donatur")
             kampanye_id = data.get("kampanye_id", "")
