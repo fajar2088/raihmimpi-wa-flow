@@ -472,6 +472,8 @@ def handle_flow_request(decrypted_body):
             }}
 
         if screen == "KONFIRMASI":
+            logger.info(f"KONFIRMASI data: {data}")
+            logger.info(f"KONFIRMASI flow_token: {flow_token}")
             nama_donatur = data.get("nama_donatur", "Donatur")
             kampanye_id = data.get("kampanye_id", "")
             kampanye_nama = data.get("kampanye_nama", "Kampanye Raihmimpi")
