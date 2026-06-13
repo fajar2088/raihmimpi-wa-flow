@@ -246,6 +246,10 @@
         "kampanye_nama": {
           "type": "string",
           "__example__": "DARURAT, Panti Tunanetra"
+        },
+        "show_nominal_lain": {
+          "type": "boolean",
+          "__example__": false
         }
       },
       "layout": {
@@ -289,15 +293,26 @@
                 "id": "0",
                 "title": "Nominal Lainnya"
               }
-            ]
+            ],
+            "on-select-action": {
+              "name": "data_exchange",
+              "payload": {
+                "tipe_donasi": "${data.tipe_donasi}",
+                "kampanye_id": "${data.kampanye_id}",
+                "kampanye_nama": "${data.kampanye_nama}",
+                "nominal": "${form.nominal}",
+                "show_nominal_lain": "${form.nominal == \"0\"}"
+              }
+            }
           },
           {
             "type": "TextInput",
-            "label": "Nominal lain",
+            "label": "Nominal Lainnya",
             "input-type": "number",
             "name": "nominal_lain",
             "required": false,
-            "helper-text": "Isi jika pilih Nominal Lainnya"
+            "helper-text": "Masukkan jumlah donasi Anda",
+            "visible": "${data.show_nominal_lain}"
           },
           {
             "type": "Footer",
@@ -536,15 +551,11 @@
           },
           {
             "type": "TextBody",
-            "text": "Donasi Anda untuk ${data.kampanye_nama} sebesar ${data.nominal_display} sedang diproses."
+            "text": "Donasi kakak sedang diproses. Detail donasi dan link pembayaran telah dikirimkan ke WhatsApp kakak."
           },
           {
             "type": "TextBody",
-            "text": "Silakan selesaikan pembayaran melalui link yang telah dikirimkan ke WhatsApp Anda."
-          },
-          {
-            "type": "TextCaption",
-            "text": "Order ID: ${data.order_id}"
+            "text": "Semoga kakak beserta keluarga diberikan kesehatan selalu, segala urusannya selalu dilancarkan, dan apa yang telah di berikan membawa keberkahan untuk kakak beserta keluarga. Aamiin. 🙏"
           },
           {
             "type": "Footer",
