@@ -624,7 +624,7 @@ def wa_flow_endpoint():
         if "encrypted_aes_key" in body:
             decrypted_body, aes_key, iv = decrypt_request(body)
             response_data = handle_flow_request(decrypted_body)
-            if "version" not in response_data:
+            if "version" not in response_data and decrypted_body.get("action") != "navigate":
                 response_data["version"] = "3.0"
             encrypted_response = encrypt_response(response_data, aes_key, iv)
             return Response(encrypted_response, mimetype="text/plain")
