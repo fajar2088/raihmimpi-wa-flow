@@ -1894,14 +1894,21 @@ def kampanye_page():
         <p style="color:#6b7280;margin:0;font-size:14px;">Kampanye yang dicentang akan muncul di Flow donasi WhatsApp (max 3 yang ditampilkan dengan gambar).</p>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn" onclick="selectAll()" style="background:#f3f4f6;color:#374151;">Pilih Semua</button>
         <button class="btn" onclick="clearAll()" style="background:#f3f4f6;color:#374151;">Kosongkan</button>
         <button class="btn" onclick="saveSelection()" id="btnSimpan">Simpan</button>
       </div>
     </div>
     <div id="filterStatus" style="margin-bottom:16px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#92400e;font-size:14px;display:none;"></div>
-    <div id="kampanyeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-      <div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:40px;">Memuat kampanye...</div>
+
+    <h4 style="margin:20px 0 10px;color:#111827;font-size:15px;">Kampanye Aktif <span id="aktifCount" style="color:#6b7280;font-weight:normal;font-size:13px;"></span></h4>
+    <div id="kampanyeAktifGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:24px;">
+      <div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:20px;font-size:14px;">Belum ada kampanye aktif</div>
+    </div>
+
+    <h4 style="margin:24px 0 10px;color:#111827;font-size:15px;">Daftar Kampanye Lainnya <span id="totalCount" style="color:#6b7280;font-weight:normal;font-size:13px;"></span></h4>
+    <input type="text" id="searchKampanye" placeholder="Cari berdasarkan ID atau nama kampanye..." onkeyup="renderList()" style="width:100%;padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
+    <div id="kampanyeList" style="border:1px solid #e5e7eb;border-radius:8px;max-height:500px;overflow-y:auto;">
+      <div style="color:#9ca3af;text-align:center;padding:20px;">Memuat...</div>
     </div>
   </div>
 
@@ -1928,22 +1935,30 @@ async function loadKampanye() {
     }
     render();
   } catch (e) {
-    document.getElementById("kampanyeGrid").innerHTML = `<div style="color:#dc2626;grid-column:1/-1;">Error: ${e.message}</div>`;
+    document.getElementById("kampanyeAktifGrid").innerHTML = `<div style="color:#dc2626;grid-column:1/-1;">Error: ${e.message}</div>`;
   }
 }
 
 function render() {
-  const grid = document.getElementById("kampanyeGrid");
-  if (!allCampaigns.length) {
-    grid.innerHTML = `<div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:40px;">Tidak ada kampanye ditemukan.</div>`;
+  renderAktif();
+  renderList();
+}
+
+function renderAktif() {
+  const aktif = allCampaigns.filter(c => c.aktif);
+  const grid = document.getElementById("kampanyeAktifGrid");
+  document.getElementById("aktifCount").textContent = `(${aktif.length})`;
+
+  if (!aktif.length) {
+    grid.innerHTML = `<div style="color:#9ca3af;grid-column:1/-1;text-align:center;padding:20px;font-size:14px;">Belum ada kampanye aktif — centang dari daftar di bawah</div>`;
     return;
   }
-  grid.innerHTML = allCampaigns.map(c => {
+  grid.innerHTML = aktif.map(c => {
     const pct = c.target > 0 ? Math.min(100, Math.round(c.total_donasi / c.target * 100)) : 0;
     return `
-      <label style="border:2px solid ${c.aktif ? '#5b3df0' : '#e5e7eb'};border-radius:10px;padding:12px;cursor:pointer;background:#fff;display:block;transition:border-color 0.15s;" onmouseover="this.style.borderColor='${c.aktif ? '#5b3df0' : '#a5b4fc'}'" onmouseout="this.style.borderColor='${c.aktif ? '#5b3df0' : '#e5e7eb'}'">
+      <label style="border:2px solid #5b3df0;border-radius:10px;padding:12px;cursor:pointer;background:#fff;display:block;">
         <div style="display:flex;gap:12px;align-items:flex-start;">
-          <input type="checkbox" data-id="${c.id}" ${c.aktif ? 'checked' : ''} onchange="toggleAktif('${c.id}', this.checked)" style="width:18px;height:18px;margin-top:2px;cursor:pointer;">
+          <input type="checkbox" checked onchange="toggleAktif('${c.id}', this.checked)" style="width:18px;height:18px;margin-top:2px;cursor:pointer;">
           ${c.image ? `<img src="${c.image}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:14px;color:#111827;margin-bottom:4px;line-height:1.3;">${(c.name || '').replace(/</g,'&lt;')}</div>
@@ -1955,6 +1970,30 @@ function render() {
       </label>
     `;
   }).join("");
+}
+
+function renderList() {
+  const nonAktif = allCampaigns.filter(c => !c.aktif);
+  const q = (document.getElementById("searchKampanye").value || "").toLowerCase().trim();
+  const filtered = q ? nonAktif.filter(c =>
+    (c.name || "").toLowerCase().includes(q) || (c.id || "").toLowerCase().includes(q)
+  ) : nonAktif;
+
+  document.getElementById("totalCount").textContent = `(${filtered.length}${q ? ` dari ${nonAktif.length}` : ''})`;
+
+  const listEl = document.getElementById("kampanyeList");
+  if (!filtered.length) {
+    listEl.innerHTML = `<div style="color:#9ca3af;text-align:center;padding:30px;font-size:14px;">${q ? 'Tidak ada hasil untuk "' + q + '"' : 'Semua kampanye sudah aktif'}</div>`;
+    return;
+  }
+  listEl.innerHTML = filtered.map((c, i) => `
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;${i < filtered.length-1 ? 'border-bottom:1px solid #f3f4f6;' : ''}" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
+      <input type="checkbox" onchange="toggleAktif('${c.id}', this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
+      <span style="font-size:13px;color:#6b7280;font-family:monospace;min-width:60px;">${c.id}</span>
+      <span style="font-size:14px;color:#111827;flex:1;">${(c.name || '').replace(/</g,'&lt;')}</span>
+    </label>
+  `).join("");
+  document.getElementById("totalCount").textContent = `(${filtered.length}${q ? ` dari ${nonAktif.length}` : ''})`;
 }
 
 function toggleAktif(id, checked) {
