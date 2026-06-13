@@ -831,7 +831,7 @@ def midtrans_callback():
                 break
         save_data(transaksi)
         if final_status == "lunas" and phone:
-            send_wa_message(phone, f"✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi Anda diterima.\n\n📋 *{kampanye}*\n💰 {format_rupiah(nominal)}\n🆔 {order_id}\n\nSemoga Allah melipatgandakan kebaikan Anda. 🤲\n_Raihmimpi.id_")
+            send_wa_message(phone, f"✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi kakak sudah kami terima untuk,\n📋 *{kampanye}*\n💰 {format_rupiah(nominal)}\n🆔 {order_id}\n\nSemoga kakak beserta keluarga diberikan kesehatan selalu, segala urusannya selalu dilancarkan, dan apa yang telah di berikan membawa keberkahan untuk kakak beserta keluarga. Aamiin. 🤲\n_Raihmimpi.id_")
             notify_telegram(f"✅ <b>LUNAS!</b>\n👤 {donatur} ({phone})\n📋 {kampanye}\n💰 {format_rupiah(nominal)}\n🆔 {order_id}")
             send_pixel_event("Purchase", phone=phone, value=nominal, currency="IDR",
                               event_id=f"purchase_{order_id}", content_name=kampanye,
@@ -882,7 +882,7 @@ def _send_lunas_notif(t, order_id, source="sync"):
     if not t.get("phone"):
         return
     try:
-        msg_wa = "✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi Anda diterima.\n\n📋 *" + str(t.get("kampanye","")) + "*\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id + "\n\nSemoga Allah melipatgandakan kebaikan Anda. 🤲\n_Raihmimpi.id_"
+        msg_wa = "✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi kakak sudah kami terima untuk,\n📋 *" + str(t.get("kampanye","")) + "*\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id + "\n\nSemoga kakak beserta keluarga diberikan kesehatan selalu, segala urusannya selalu dilancarkan, dan apa yang telah di berikan membawa keberkahan untuk kakak beserta keluarga. Aamiin. 🤲\n_Raihmimpi.id_"
         send_wa_message(t["phone"], msg_wa)
         msg_tg = "✅ <b>LUNAS (" + source + ")!</b>\n👤 " + str(t.get("donatur","")) + " (" + str(t.get("phone","")) + ")\n📋 " + str(t.get("kampanye","")) + "\n💰 " + format_rupiah(t.get("nominal",0)) + "\n🆔 " + order_id
         notify_telegram(msg_tg)
