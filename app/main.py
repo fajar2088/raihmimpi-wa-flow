@@ -709,9 +709,16 @@ def wa_flow_endpoint():
                                 text = msg.get("text", {}).get("body", "")
                             elif msg_type == "interactive":
                                 interactive = msg.get("interactive", {})
-                                if interactive.get("type") == "button_reply":
+                                itype = interactive.get("type")
+                                if itype == "button_reply":
                                     button_reply_id = interactive.get("button_reply", {}).get("id")
                                     text = interactive.get("button_reply", {}).get("title", "")
+                                elif itype == "nfm_reply":
+                                    # Flow submission — tampilkan sebagai "📄 [Nama Flow] · Jawaban terkirim"
+                                    nfm = interactive.get("nfm_reply", {})
+                                    flow_name = nfm.get("name", "Flow")
+                                    body_txt = nfm.get("body", "Sent")
+                                    text = f"📄 {flow_name.title()} · {body_txt}"
                                 else:
                                     text = json.dumps(interactive)[:500]
                             else:
