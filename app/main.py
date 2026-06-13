@@ -443,12 +443,17 @@ def handle_flow_request(decrypted_body):
                               content_name=kampanye_nama,
                               content_ids=[kampanye_id] if kampanye_id else None)
 
+            try:
+                nominal_lain_int = int(nominal_lain) if nominal_lain else 0
+            except (ValueError, TypeError):
+                nominal_lain_int = 0
+
             return {"screen": "DATA_DONATUR", "data": {
                 "tipe_donasi": data.get("tipe_donasi", "sekali"),
-                "kampanye_id": kampanye_id,
-                "kampanye_nama": kampanye_nama,
+                "kampanye_id": str(kampanye_id),
+                "kampanye_nama": str(kampanye_nama),
                 "nominal": str(nominal),
-                "nominal_lain": nominal_lain,
+                "nominal_lain": nominal_lain_int,
             }}
 
         if screen == "SELESAI":
