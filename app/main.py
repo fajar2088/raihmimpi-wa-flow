@@ -299,47 +299,6 @@ def send_wa_flow_message(to_phone, body_text="Yuk mulai donasi via Raihmimpi �
     return resp
 
 # ============================================================
-# Halosis API (alternatif kirim Flow tanpa Graph API langsung)
-# ============================================================
-HALOSIS_API_BASE = "https://api.halosis.id/v1"
-HALOSIS_EMAIL = os.environ.get("HALOSIS_EMAIL", "")
-HALOSIS_PASSWORD = os.environ.get("HALOSIS_PASSWORD", "")
-HALOSIS_LONG_TOKEN = os.environ.get("HALOSIS_LONG_TOKEN", "")  # cache long-lived token (60 hari)
-HALOSIS_FROM_PHONE = os.environ.get("HALOSIS_FROM_PHONE", "6281316316135")
-HALOSIS_DONASI_FLOW_ID = os.environ.get("HALOSIS_DONASI_FLOW_ID", "") or DONASI_FLOW_ID
-
-def halosis_login():
-    """Login email+password -> dapat refresh_token (valid 24 jam)."""
-    resp = requests.post(f"{HALOSIS_API_BASE}/login",
-        json={"email": HALOSIS_EMAIL, "password": HALOSIS_PASSWORD}, timeout=15)
-    logger.info(f"halosis_login status={resp.status_code} body={resp.text[:300]}")
-    resp.raise_for_status()
-    return resp.json().get("refresh_token")
-
-def halosis_get_access_token():
-    """refresh_token -> long_lived_token (valid 60 hari)."""
-    refresh_token = halosis_login()
-    resp = requests.post(f"{HALOSIS_API_BASE}/access-token",
-        json={"refresh_token": refresh_token}, timeout=15)
-    logger.info(f"halosis_access_token status={resp.status_code} body={resp.text[:300]}")
-    resp.raise_for_status()
-    return resp.json().get("long_lived_token")
-
-def halosis_send_flow_message(to_phone, message="Yuk mulai donasi via Raihmimpi 🤲"):
-    """Kirim WhatsApp Flow message via Halosis API (/v1/messages, type=flow)."""
-    token = HALOSIS_LONG_TOKEN or halosis_get_access_token()
-    payload = {
-        "from_phone_number": HALOSIS_FROM_PHONE,
-        "to": to_phone,
-        "type": "flow",
-        "message": message,
-        "flow_id": HALOSIS_DONASI_FLOW_ID
-    }
-    resp = requests.post(f"{HALOSIS_API_BASE}/messages", json=payload,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=15)
-    logger.info(f"halosis_send_flow status={resp.status_code} body={resp.text[:500]}")
-    return resp
-
 def notify_telegram(text):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -419,7 +378,7 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ============================================================
-# Inbox / Percakapan WhatsApp (untuk fitur Inbox mirip Halosis)
+# Inbox / Percakapan WhatsApp
 # ============================================================
 INBOX_FILE = os.environ.get("DATA_DIR", "/tmp") + "/inbox.json"
 
@@ -436,7 +395,7 @@ def save_inbox(inbox):
         json.dump(inbox, f, ensure_ascii=False, indent=2)
 
 # ============================================================
-# Settings (Menu Utama, dll) - sistem sendiri, tidak terhubung Halosis
+# Settings (Menu Utama, dll)
 # ============================================================
 SETTINGS_FILE = os.environ.get("DATA_DIR", "/tmp") + "/settings.json"
 
@@ -1038,198 +997,7 @@ def list_kampanye():
 def health():
     return jsonify({"status": "ok", "service": "Raihmimpi WA Flow Backend", "version": "3.2.0"})
 
-@app.route("/halosis-test-send", methods=["GET"])
-def halosis_test_send():
-    """Debug: kirim test Flow message via Halosis API ke nomor tertentu.
-    Usage: /halosis-test-send?to=628112344635"""
-    to = request.args.get("to", "")
-    if not to:
-        return jsonify({"error": "param 'to' wajib diisi, contoh: ?to=628112344635"}), 400
-    try:
-        resp = halosis_send_flow_message(to)
-        return jsonify({
-            "to": to,
-            "flow_id_used": HALOSIS_DONASI_FLOW_ID,
-            "halosis_status": resp.status_code,
-            "halosis_body": resp.text[:1000]
-        })
-    except Exception as e:
-        logger.error(f"halosis_test_send error: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
 
-@app.route("/halosis-flows", methods=["GET"])
-def halosis_flows():
-    """Debug: list survey flows yang terdaftar di Halosis (cari flow_id donasi)."""
-    try:
-        token = HALOSIS_LONG_TOKEN or halosis_get_access_token()
-        resp = requests.get(f"{HALOSIS_API_BASE}/surveys",
-            headers={"Authorization": f"Bearer {token}"}, timeout=15)
-        return jsonify({"halosis_status": resp.status_code, "halosis_body": resp.json() if resp.ok else resp.text})
-    except Exception as e:
-        logger.error(f"halosis_flows error: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/halosis-webhook", methods=["POST", "GET"])
-def halosis_webhook():
-    """
-    Webhook untuk event 'Message Received' dari Halosis.
-    Kalau pesan masuk mengandung keyword donasi, kirim WhatsApp Flow.
-
-    Karena format payload Halosis belum diketahui pasti, fungsi ini
-    mencoba beberapa kemungkinan struktur umum sambil mencatat raw body
-    ke log untuk debugging.
-    """
-    if request.method == "GET":
-        # Beberapa provider melakukan verifikasi webhook via GET
-        return jsonify({"status": "ok"}), 200
-
-    try:
-        body = request.get_json(silent=True) or {}
-        logger.info(f"HALOSIS WEBHOOK RAW BODY: {json.dumps(body)[:2000]}")
-
-        phone = None
-        text = None
-
-        # Struktur asli Halosis: {"type": "message.received", "data": {"from_phone_number": ..., "message": ...}}
-        if body.get("type") == "message.received":
-            data = body.get("data", {})
-            phone = data.get("from_phone_number")
-            text = data.get("message")
-
-        # Fallback untuk struktur lain (mirip Cloud API / variasi field)
-        if not phone:
-            try:
-                entry = body.get("entry", [])
-                if entry:
-                    value = entry[0]["changes"][0]["value"]
-                    messages = value.get("messages", [])
-                    if messages:
-                        phone = messages[0].get("from")
-                        text = messages[0].get("text", {}).get("body")
-            except Exception:
-                pass
-
-        if not phone:
-            for key in ["from", "phone", "sender", "wa_id", "from_phone_number"]:
-                if body.get(key):
-                    phone = body.get(key)
-                    break
-
-        if not text:
-            for key in ["message", "text", "body", "msg"]:
-                val = body.get(key)
-                if isinstance(val, str):
-                    text = val
-                    break
-
-        if (not phone or not text) and isinstance(body.get("data"), dict):
-            data = body["data"]
-            phone = phone or data.get("from_phone_number") or data.get("from") or data.get("phone")
-            text = text or data.get("message") or data.get("text")
-
-        logger.info(f"HALOSIS WEBHOOK PARSED: phone={phone} text={text}")
-
-        if not phone or not text:
-            return jsonify({"status": "ignored", "reason": "phone/text not found", "raw": body}), 200
-
-        # Ambil nama kontak jika tersedia di payload
-        contact_name = None
-        try:
-            data = body.get("data", {})
-            contact_name = data.get("name") or data.get("from_name") or data.get("contact_name")
-        except Exception:
-            pass
-
-        # Simpan SEMUA pesan masuk ke inbox (untuk fitur Inbox/Chat)
-        clean_phone_inbox = phone.replace("+", "").replace(" ", "").replace("-", "")
-        record_incoming_message(clean_phone_inbox, text, msg_type="text", name=contact_name)
-
-        # Normalisasi nomor (hapus + dan spasi/strip)
-        clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-
-        # Extract referral (CTWA Instagram/Facebook ad)
-        referral = {}
-        ctwa_clid = ""
-        try:
-            ref_data = body.get("data", {}).get("referral")
-            if isinstance(ref_data, dict):
-                referral = ref_data
-                ctwa_clid = ref_data.get("ctwa_clid", "")
-        except Exception:
-            pass
-
-        # Cek apakah kontak baru
-        inbox = load_inbox()
-        existing_contact = inbox.get("contacts", {}).get(clean_phone)
-        is_new_contact = existing_contact is None
-        menu_already_sent = existing_contact and existing_contact.get("menu_sent")
-        already_resolved = existing_contact and existing_contact.get("status") == "selesai"
-
-        # Simpan metadata CTWA ke contact (untuk attribution Meta Ads)
-        if referral:
-            inbox = load_inbox()
-            contact_rec = inbox.get("contacts", {}).get(clean_phone, {})
-            contact_rec["ctwa_clid"] = ctwa_clid
-            contact_rec["ad_source_url"] = referral.get("source_url", "")
-            contact_rec["ad_headline"] = referral.get("headline", "")
-            contact_rec["ad_source_type"] = referral.get("source_type", "")
-            inbox["contacts"][clean_phone] = contact_rec
-            save_inbox(inbox)
-            logger.info(f"CTWA referral disimpan untuk {clean_phone}: clid={ctwa_clid[:30]}... headline={referral.get('headline','')}")
-
-            # Kirim Pixel event Lead (kontak baru dari ad masuk = qualified lead)
-            # Cek via ctwa_clid lama (bukan is_new_contact, karena record_incoming_message sudah create contact)
-            had_ctwa_before = existing_contact and existing_contact.get("ctwa_clid")
-            # Validasi: ctwa_clid asli dari Meta biasanya ~80+ char base64-like
-            # Skip kalau format tidak valid (testing/manual curl)
-            is_valid_clid = ctwa_clid and len(ctwa_clid) >= 50 and not ctwa_clid.startswith("clid_test") and not ctwa_clid.startswith("test_")
-            if not had_ctwa_before and is_valid_clid:
-                try:
-                    send_pixel_event("LeadSubmitted", phone=clean_phone, currency="IDR",
-                                      event_id=f"lead_{clean_phone}_{int(datetime.now().timestamp())}",
-                                      content_name=referral.get("headline", "CTWA Raihmimpi"),
-                                      ctwa_clid=ctwa_clid)
-                except Exception as pe:
-                    logger.error(f"Pixel Lead event gagal: {pe}")
-            elif not had_ctwa_before:
-                logger.info(f"Skip Pixel LeadSubmitted (ctwa_clid tidak valid/testing): {ctwa_clid[:30] if ctwa_clid else 'None'}")
-
-        text_lower = (text or "").lower()
-
-        # Logic 1: Keyword donasi → kirim Flow donasi langsung via WA Cloud API
-        if any(kw in text_lower for kw in DONASI_KEYWORDS):
-            try:
-                send_wa_flow_message(clean_phone)
-                logger.info(f"Flow donasi dikirim ke {clean_phone} via Halosis webhook (keyword match)")
-                # Set menu_sent agar tidak double-kirim Menu Utama setelah ini
-                inbox = load_inbox()
-                if clean_phone in inbox.get("contacts", {}):
-                    inbox["contacts"][clean_phone]["menu_sent"] = True
-                    save_inbox(inbox)
-                return jsonify({"status": "flow_sent", "to": clean_phone}), 200
-            except Exception as fe:
-                logger.error(f"send_wa_flow_message gagal: {fe}", exc_info=True)
-                return jsonify({"status": "flow_failed", "to": clean_phone, "error": str(fe)}), 200
-
-        # Logic 2: Kontak baru atau belum di-resolve & belum dapat Menu Utama → kirim Menu Utama
-        if (is_new_contact or not already_resolved) and not menu_already_sent:
-            try:
-                send_menu_utama(clean_phone)
-                inbox = load_inbox()
-                if clean_phone in inbox.get("contacts", {}):
-                    inbox["contacts"][clean_phone]["menu_sent"] = True
-                    save_inbox(inbox)
-                logger.info(f"Menu Utama dikirim ke {clean_phone} via Halosis webhook")
-                return jsonify({"status": "menu_sent", "to": clean_phone}), 200
-            except Exception as me:
-                logger.error(f"send_menu_utama gagal: {me}", exc_info=True)
-                return jsonify({"status": "menu_failed", "to": clean_phone, "error": str(me)}), 200
-
-        return jsonify({"status": "ignored", "reason": "menu sudah dikirim & bukan keyword donasi"}), 200
-
-    except Exception as e:
-        logger.error(f"Error halosis-webhook: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/inbox", methods=["GET"])
 def api_inbox_list():
@@ -1255,23 +1023,15 @@ def api_inbox_messages(phone):
 
 @app.route("/api/inbox/<phone>/reply", methods=["POST"])
 def api_inbox_reply(phone):
-    """Kirim balasan teks ke kontak via Halosis API, dan simpan ke inbox."""
+    """Kirim balasan teks ke kontak via WhatsApp Cloud API (Graph), dan simpan ke inbox."""
     body = request.get_json(silent=True) or {}
     text = body.get("text", "").strip()
     if not text:
         return jsonify({"error": "text wajib diisi"}), 400
     try:
-        resp = requests.post(f"{HALOSIS_API_BASE}/messages",
-            json={
-                "from_phone_number": HALOSIS_FROM_PHONE,
-                "to": phone,
-                "type": "text",
-                "message": text,
-            },
-            headers={"Authorization": f"Bearer {HALOSIS_LONG_TOKEN or halosis_get_access_token()}", "Content-Type": "application/json"},
-            timeout=15)
+        resp = send_wa_message(phone, text)
         record_outgoing_message(phone, text, msg_type="text")
-        return jsonify({"status": "sent", "halosis_status": resp.status_code, "halosis_body": resp.text[:300]})
+        return jsonify({"status": "sent", "wa_status": resp.status_code, "wa_body": resp.text[:300]})
     except Exception as e:
         logger.error(f"api_inbox_reply error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -1529,7 +1289,7 @@ def render_page(active, title, subtitle, body_html, extra_head=""):
 
 @app.route("/dashboard", methods=["GET"])
 def dashboard():
-    """Dashboard donasi sederhana (mirip Halosis dashboard)."""
+    """Dashboard donasi sederhana."""
     body = """
   <div class="cards">
     <div class="card"><div class="icon">&#128176;</div><div class="value" id="total_nominal">-</div><div class="label">Total Nominal Donasi (Lunas)</div></div>
@@ -1613,7 +1373,7 @@ setInterval(loadData, 30000);
 
 @app.route("/pesanan", methods=["GET"])
 def pesanan():
-    """Daftar pesanan donasi dengan filter (mirip Halosis Daftar Donasi)."""
+    """Daftar pesanan donasi dengan filter."""
     body = """
   <div class="panel">
     <div class="filters">
@@ -1785,7 +1545,7 @@ def pesanan_detail(order_id):
 
 @app.route("/chat", methods=["GET"])
 def chat_page():
-    """Halaman Inbox/Chat - list kontak (kiri) + panel percakapan (kanan), mirip Halosis."""
+    """Halaman Inbox/Chat - list kontak (kiri) + panel percakapan (kanan)."""
     body = """
   <div class="chat-wrap">
     <div class="chat-list">
