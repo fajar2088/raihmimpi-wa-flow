@@ -1576,12 +1576,23 @@ function initials(name) {
 }
 function formatTime(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString("id-ID", {hour:"2-digit", minute:"2-digit"});
+  // Asumsikan timestamp tanpa Z/offset adalah UTC (Railway server pakai UTC)
+  // Tambah Z supaya JS parse sebagai UTC, lalu tampilkan dalam WIB (Asia/Jakarta)
+  let isoFixed = iso;
+  if (!/Z|[+-]\d{2}:?\d{2}$/.test(iso)) {
+    isoFixed = iso + "Z";
   }
-  return d.toLocaleDateString("id-ID", {day:"numeric", month:"short"});
+  const d = new Date(isoFixed);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const tzOpts = {timeZone: "Asia/Jakarta"};
+  // Bandingkan tanggal dalam WIB
+  const dStr = d.toLocaleDateString("id-ID", tzOpts);
+  const nowStr = now.toLocaleDateString("id-ID", tzOpts);
+  if (dStr === nowStr) {
+    return d.toLocaleTimeString("id-ID", {...tzOpts, hour:"2-digit", minute:"2-digit"});
+  }
+  return d.toLocaleDateString("id-ID", {...tzOpts, day:"numeric", month:"short"});
 }
 
 function setTab(el) {
