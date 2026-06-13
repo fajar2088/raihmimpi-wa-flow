@@ -1221,7 +1221,7 @@ LAYOUT_CSS = """
   .chat-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; background:#f9fafb; }
   .chat-bubble { max-width:60%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.4; }
   .chat-bubble.in { background:#fff; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.06); }
-  .chat-bubble.out { background:#5b3df0; color:#fff; align-self:flex-end; }
+  .chat-bubble.out { background:#f3f4f6; color:#1f2937; align-self:flex-end; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
   .chat-input-bar { display:flex; gap:10px; padding:14px 16px; border-top:1px solid #eee; }
   .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
