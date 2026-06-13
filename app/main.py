@@ -1592,6 +1592,7 @@ loadMenuUtama();
     return Response(render_page("whatsapp", "WhatsApp", "Menu Utama dan WhatsApp Blast - sistem Raihmimpi", body), mimetype="text/html")
 
 
+@app.route("/kampanye", methods=["GET"])
 def kampanye_page():
     """Halaman kelola kampanye yang ditampilkan di Flow donasi (segera hadir)."""
     body = """
