@@ -1973,7 +1973,7 @@ LAYOUT_CSS = """
 def render_sidebar(active):
     items = [
         ("dashboard", "/dashboard", "&#x1F4CA;", "Dashboard"),
-        ("pesanan", "/pesanan", "&#x1F4CB;", "Pesanan"),
+        ("pesanan", "/pesanan", "&#x1F4CB;", "Transaksi"),
         ("chat", "/chat", "&#x1F4AC;", "Chat"),
         ("kampanye", "/kampanye", "&#x1F3AF;", "Kampanye"),
         ("whatsapp", "/whatsapp", "WA", "WhatsApp"),
@@ -2019,7 +2019,6 @@ def render_sidebar(active):
         '<div style="padding:8px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:4px;">' +
         '<div style="font-size:12px;color:rgba(255,255,255,.7);">Masuk sebagai</div>' +
         f'<div style="font-size:13px;font-weight:700;color:#fff;">{user_nama}</div>' +
-        f'<div style="font-size:11px;color:rgba(255,255,255,.5);">{user_role}</div>' +
         '</div>' +
         html_links +
         pengaturan_block +
