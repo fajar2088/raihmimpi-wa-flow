@@ -421,6 +421,8 @@ def save_inbox(inbox):
 # Settings (Menu Utama, dll)
 # ============================================================
 SETTINGS_FILE = os.environ.get("DATA_DIR", "/tmp") + "/settings.json"
+SHORTCUTS_FILE = os.environ.get("DATA_DIR", "/tmp") + "/shortcuts.json"
+SHORTCUTS_MEDIA_DIR = os.environ.get("DATA_DIR", "/tmp") + "/shortcut_files"
 
 DEFAULT_SETTINGS = {
     "menu_utama": {
@@ -432,6 +434,19 @@ DEFAULT_SETTINGS = {
         ],
     }
 }
+
+def load_shortcuts():
+    if not os.path.exists(SHORTCUTS_FILE):
+        return []
+    try:
+        with open(SHORTCUTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_shortcuts(data):
+    with open(SHORTCUTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def load_settings():
     if not os.path.exists(SETTINGS_FILE):
@@ -1315,6 +1330,14 @@ LAYOUT_CSS = """
   .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
   .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
   .chat-input-bar button:hover { background:#4c30d9; }
+  .shortcut-popup { position:absolute;bottom:70px;left:0;right:0;background:#fff;border-radius:12px 12px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.12);max-height:60vh;overflow-y:auto;z-index:300;display:none; }
+  .shortcut-popup.open { display:block; }
+  .shortcut-popup-header { background:#5b3df0;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:12px 12px 0 0; }
+  .shortcut-popup-header span { color:#fff;font-weight:700;font-size:15px; }
+  .shortcut-item { padding:14px 18px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .1s; }
+  .shortcut-item:hover { background:#f9fafb; }
+  .shortcut-item-key { font-size:13px;font-weight:700;color:#5b3df0;margin-bottom:4px; }
+  .shortcut-item-body { font-size:13px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   .attach-btn { background:#f3f4f6; border:none; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#5b3df0; transition:background .15s; }
   .attach-btn:hover { background:#e0e7ff; }
   .attach-menu { position:absolute; bottom:70px; left:16px; background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.13); min-width:220px; overflow:hidden; z-index:200; display:none; }
@@ -1771,6 +1794,14 @@ async function openChat(phone) {
     </div>
     <div class="chat-messages" id="chatMessages"></div>
     <div class="chat-input-bar">
+      <!-- Shortcut popup (trigger /) -->
+      <div id="shortcutPopup" class="shortcut-popup">
+        <div class="shortcut-popup-header">
+          <span>⚡ List Shortcut</span>
+          <span onclick="closeShortcutPopup()" style="cursor:pointer;font-size:20px;">✕</span>
+        </div>
+        <div id="shortcutPopupList"></div>
+      </div>
       <div id="attachMenu" class="attach-menu">
         <div class="attach-menu-item" onclick="sendFlowAttachment()">
           <span class="icon">📋</span><span>Flow Donasi</span>
@@ -1786,7 +1817,7 @@ async function openChat(phone) {
         </div>
       </div>
       <button class="attach-btn" onclick="toggleAttachMenu(event)" title="Lampiran">＋</button>
-      <input type="text" id="chatInput" placeholder="Tulis balasan..." onkeydown="if(event.key==='Enter') sendReply()">
+      <input type="text" id="chatInput" placeholder="Tulis balasan..." onkeydown="if(event.key==='Enter'){closeShortcutPopup();sendReply();}" oninput="onChatInput(this.value)">
       <button onclick="sendReply()">Kirim</button>
     </div>
   `;
@@ -2058,6 +2089,92 @@ async function blokirContact(phone) {
   }
 }
 
+// ---- Shortcut Popup (trigger /) ----
+let _allShortcuts = [];
+(async function() {
+  try {
+    const res = await fetch("/api/shortcuts");
+    const json = await res.json();
+    _allShortcuts = json.shortcuts || [];
+  } catch(e) {}
+})();
+
+function onChatInput(val) {
+  const popup = document.getElementById("shortcutPopup");
+  const list = document.getElementById("shortcutPopupList");
+  if (!popup || !list) return;
+
+  if (!val.startsWith("/")) {
+    popup.classList.remove("open");
+    return;
+  }
+
+  const query = val.toLowerCase();
+  const filtered = _allShortcuts.filter(s =>
+    s.shortcut.toLowerCase().startsWith(query) ||
+    s.title.toLowerCase().includes(query.slice(1))
+  );
+
+  if (!filtered.length) {
+    popup.classList.remove("open");
+    return;
+  }
+
+  const typeIcon = {TEXT:"📝", IMAGE:"🖼", DOCUMENT:"📄", VIDEO:"🎥"};
+  list.innerHTML = filtered.map(s => `
+    <div class="shortcut-item" onclick="selectShortcut('${s.id}')">
+      <div class="shortcut-item-key">${s.shortcut} &nbsp;<span style="font-weight:400;color:#9ca3af;">${typeIcon[s.content_type]||""} ${s.content_type}</span></div>
+      <div class="shortcut-item-body">${s.file_name || s.isi || ""}</div>
+    </div>
+  `).join("");
+  popup.classList.add("open");
+}
+
+function closeShortcutPopup() {
+  const popup = document.getElementById("shortcutPopup");
+  if (popup) popup.classList.remove("open");
+}
+
+async function selectShortcut(scId) {
+  closeShortcutPopup();
+  if (!currentPhone) return;
+
+  const sc = _allShortcuts.find(s => s.id === scId);
+  if (!sc) return;
+
+  // Clear input
+  const input = document.getElementById("chatInput");
+  if (input) input.value = "";
+
+  // Loading indicator
+  const loadingEl = document.createElement("div");
+  loadingEl.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#5b3df0;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;";
+  loadingEl.textContent = "Mengirim " + sc.title + "...";
+  document.body.appendChild(loadingEl);
+
+  try {
+    const res = await fetch("/api/shortcuts/" + scId + "/send/" + currentPhone, {method:"POST"});
+    const json = await res.json();
+    document.body.removeChild(loadingEl);
+    if (json.status === "sent") {
+      openChat(currentPhone);
+    } else {
+      alert("Gagal kirim shortcut: " + (json.error || "unknown"));
+    }
+  } catch(e) {
+    document.body.removeChild(loadingEl);
+    alert("Error: " + e.message);
+  }
+}
+
+// Tutup shortcut popup kalau klik di luar
+document.addEventListener("click", function(e) {
+  const popup = document.getElementById("shortcutPopup");
+  if (popup && !popup.contains(e.target)) {
+    popup.classList.remove("open");
+  }
+});
+
 function toggleAttachMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById("attachMenu");
@@ -2172,6 +2289,7 @@ def whatsapp_page():
     <div class="settings-tab active" data-tab="menu-utama" onclick="setSettingsTab(this)">Menu Utama</div>
     <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">WA Blast</div>
     <div class="settings-tab" data-tab="label-kontak" onclick="setSettingsTab(this)">Label Kontak</div>
+    <div class="settings-tab" data-tab="shortcuts" onclick="setSettingsTab(this)">Shortcuts Pesan</div>
   </div>
 
   <div class="settings-section active" id="section-menu-utama">
@@ -2214,6 +2332,85 @@ def whatsapp_page():
 
       <button class="btn" onclick="sendBlast()">Kirim Blast</button>
       <span class="save-msg" id="blastSendMsg"></span>
+    </div>
+  </div>
+
+  <div class="settings-section" id="section-shortcuts">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+          <h2 style="margin:0;">Shortcuts Pesan</h2>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Ketik / di chat untuk akses shortcut cepat.</p>
+        </div>
+        <button class="btn" onclick="showShortcutForm()">+ Tambah Shortcut</button>
+      </div>
+
+      <!-- Table -->
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Judul</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Content Type</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Shortcut</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Isi</th>
+            <th style="padding:12px 16px;text-align:right;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="shortcutsTableBody">
+          <tr><td colspan="5" style="padding:40px;text-align:center;color:#9ca3af;">Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal Form Shortcut -->
+    <div id="shortcutFormModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:16px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+        <div style="background:#5b3df0;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-radius:16px 16px 0 0;">
+          <span style="color:#fff;font-weight:700;font-size:16px;" id="shortcutFormTitle">Buat Shortcuts Pesan</span>
+          <span onclick="closeShortcutForm()" style="color:#fff;cursor:pointer;font-size:22px;">✕</span>
+        </div>
+        <div style="padding:24px;">
+          <input type="hidden" id="scFormId">
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Channel</label>
+            <select id="scFormChannel" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="WHATSAPP">WHATSAPP</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Content Type</label>
+            <select id="scFormType" onchange="onScTypeChange()" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="">-- Pilih Tipe --</option>
+              <option value="TEXT">TEXT</option>
+              <option value="IMAGE">IMAGE</option>
+              <option value="DOCUMENT">DOCUMENT</option>
+              <option value="VIDEO">VIDEO</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Shortcut <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="scFormShortcut" placeholder="/contoh-shortcut" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Judul <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="scFormTitle" placeholder="Nama shortcut..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          </div>
+          <div style="margin-bottom:16px;" id="scIsiGroup">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Isi</label>
+            <textarea id="scFormIsi" rows="5" placeholder="Tulis isi pesan..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+            <div style="font-size:12px;color:#9ca3af;margin-top:4px;"><span id="scIsiCount">0</span>/3400</div>
+          </div>
+          <div style="margin-bottom:16px;display:none;" id="scFileGroup">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Upload File</label>
+            <input type="file" id="scFormFile" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+            <div id="scFilePreview" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
+          </div>
+        </div>
+        <div style="padding:16px 24px;border-top:1px solid #f3f4f6;display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="closeShortcutForm()" style="padding:10px 20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-weight:600;">Batal</button>
+          <button onclick="saveShortcutForm()" style="padding:10px 24px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">Simpan</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2284,11 +2481,128 @@ def whatsapp_page():
 function setSettingsTab(el) {
   if (el.dataset.tab === "label-kontak") loadLabelsTable();
   if (el.dataset.tab === "wa-blast") loadBlastContacts();
+  if (el.dataset.tab === "shortcuts") loadShortcutsTable();
   document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".settings-section").forEach(s => s.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("section-" + el.dataset.tab).classList.add("active");
   if (el.dataset.tab === "wa-blast") loadBlastContacts();
+}
+
+// ---- Shortcuts Pesan ----
+async function loadShortcutsTable() {
+  const tbody = document.getElementById("shortcutsTableBody");
+  if (!tbody) return;
+  try {
+    const res = await fetch("/api/shortcuts");
+    const json = await res.json();
+    const list = json.shortcuts || [];
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:#9ca3af;">Belum ada shortcut. Klik "+ Tambah Shortcut".</td></tr>';
+      return;
+    }
+    const typeIcon = {TEXT:"📝", IMAGE:"🖼", DOCUMENT:"📄", VIDEO:"🎥"};
+    tbody.innerHTML = list.map(s => `
+      <tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 16px;font-size:14px;font-weight:600;">${s.title}</td>
+        <td style="padding:12px 16px;font-size:13px;">${typeIcon[s.content_type]||""} ${s.content_type}</td>
+        <td style="padding:12px 16px;"><code style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-size:13px;">${s.shortcut}</code></td>
+        <td style="padding:12px 16px;font-size:13px;color:#6b7280;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.file_name ? s.file_name : (s.isi||"").substring(0,60)}</td>
+        <td style="padding:12px 16px;text-align:right;">
+          <button onclick="deleteShortcut('${s.id}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;padding:4px 8px;" title="Hapus">🗑</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;color:#dc2626;">Gagal memuat shortcuts.</td></tr>';
+  }
+}
+
+function showShortcutForm() {
+  document.getElementById("shortcutFormTitle").textContent = "Buat Shortcuts Pesan";
+  document.getElementById("scFormId").value = "";
+  document.getElementById("scFormShortcut").value = "";
+  document.getElementById("scFormTitle").value = "";
+  document.getElementById("scFormType").value = "";
+  document.getElementById("scFormIsi").value = "";
+  document.getElementById("scIsiCount").textContent = "0";
+  document.getElementById("scIsiGroup").style.display = "block";
+  document.getElementById("scFileGroup").style.display = "none";
+  document.getElementById("scFilePreview").textContent = "";
+  document.getElementById("shortcutFormModal").style.display = "flex";
+}
+
+function closeShortcutForm() {
+  document.getElementById("shortcutFormModal").style.display = "none";
+}
+
+function onScTypeChange() {
+  const t = document.getElementById("scFormType").value;
+  const isMedia = ["IMAGE","DOCUMENT","VIDEO"].includes(t);
+  document.getElementById("scIsiGroup").style.display = isMedia ? "none" : "block";
+  document.getElementById("scFileGroup").style.display = isMedia ? "block" : "none";
+  // Set accept filter
+  const fileInput = document.getElementById("scFormFile");
+  if (t === "IMAGE") fileInput.accept = "image/*";
+  else if (t === "VIDEO") fileInput.accept = "video/*";
+  else if (t === "DOCUMENT") fileInput.accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
+  // Update shortcut placeholder
+  const scInput = document.getElementById("scFormShortcut");
+  if (!scInput.value) scInput.value = "/";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  const isiEl = document.getElementById("scFormIsi");
+  if (isiEl) isiEl.addEventListener("input", function() {
+    document.getElementById("scIsiCount").textContent = this.value.length;
+  });
+  const fileEl = document.getElementById("scFormFile");
+  if (fileEl) fileEl.addEventListener("change", function() {
+    const f = this.files[0];
+    document.getElementById("scFilePreview").textContent = f ? f.name + " (" + (f.size/1024).toFixed(1) + " KB)" : "";
+  });
+});
+
+async function saveShortcutForm() {
+  const shortcut = document.getElementById("scFormShortcut").value.trim();
+  const title = document.getElementById("scFormTitle").value.trim();
+  const content_type = document.getElementById("scFormType").value;
+  const isi = document.getElementById("scFormIsi").value.trim();
+  const file = document.getElementById("scFormFile").files[0];
+
+  if (!shortcut || !title || !content_type) {
+    alert("Shortcut, Judul, dan Content Type wajib diisi");
+    return;
+  }
+  if (["IMAGE","DOCUMENT","VIDEO"].includes(content_type) && !file) {
+    alert("File wajib diupload untuk tipe " + content_type);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("shortcut", shortcut);
+  formData.append("title", title);
+  formData.append("content_type", content_type);
+  formData.append("isi", isi);
+  if (file) formData.append("file", file);
+
+  try {
+    const res = await fetch("/api/shortcuts", {method:"POST", body:formData});
+    const json = await res.json();
+    if (json.error) { alert("Error: " + json.error); return; }
+    closeShortcutForm();
+    loadShortcutsTable();
+  } catch(e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function deleteShortcut(id) {
+  if (!confirm("Hapus shortcut ini?")) return;
+  try {
+    await fetch("/api/shortcuts/" + id, {method:"DELETE"});
+    loadShortcutsTable();
+  } catch(e) { alert("Error: " + e.message); }
 }
 
 // ---- Label Kontak ----
@@ -2794,6 +3108,172 @@ def api_labels_delete(label_id):
     if cleaned > 0:
         save_inbox(inbox)
     return jsonify({"status": "ok", "cleaned_contacts": cleaned})
+
+# ============================================================
+# SHORTCUTS API
+# ============================================================
+
+@app.route("/api/shortcuts", methods=["GET"])
+def api_shortcuts_list():
+    """List semua shortcuts."""
+    shortcuts = load_shortcuts()
+    return jsonify({"shortcuts": shortcuts})
+
+@app.route("/api/shortcuts", methods=["POST"])
+def api_shortcuts_create():
+    """Buat shortcut baru (text) atau dengan file attachment."""
+    try:
+        shortcut_key = request.form.get("shortcut", "").strip()
+        title = request.form.get("title", "").strip()
+        content_type = request.form.get("content_type", "TEXT").upper()
+        isi = request.form.get("isi", "").strip()
+
+        if not shortcut_key or not title:
+            return jsonify({"error": "shortcut dan judul wajib diisi"}), 400
+        if not shortcut_key.startswith("/"):
+            shortcut_key = "/" + shortcut_key
+
+        shortcuts = load_shortcuts()
+        # Cek duplikat
+        if any(s["shortcut"] == shortcut_key for s in shortcuts):
+            return jsonify({"error": f"Shortcut '{shortcut_key}' sudah ada"}), 400
+
+        new_id = f"sc_{int(datetime.now().timestamp()*1000)}"
+        sc = {
+            "id": new_id,
+            "shortcut": shortcut_key,
+            "title": title,
+            "content_type": content_type,
+            "isi": isi,
+            "file_path": None,
+            "file_name": None,
+            "media_id": None,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        # Handle file upload
+        file = request.files.get("file")
+        if file and content_type in ("IMAGE", "DOCUMENT", "VIDEO"):
+            os.makedirs(SHORTCUTS_MEDIA_DIR, exist_ok=True)
+            filename = f"{new_id}_{file.filename}"
+            filepath = os.path.join(SHORTCUTS_MEDIA_DIR, filename)
+            file.save(filepath)
+            sc["file_path"] = filepath
+            sc["file_name"] = file.filename
+
+            # Upload ke Meta untuk dapat media_id (re-usable)
+            try:
+                mime = file.content_type or "application/octet-stream"
+                with open(filepath, "rb") as f_read:
+                    upload_resp = requests.post(
+                        f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/media",
+                        headers={"Authorization": f"Bearer {WA_TOKEN}"},
+                        files={"file": (file.filename, f_read, mime)},
+                        data={"messaging_product": "whatsapp", "type": mime},
+                        timeout=30)
+                if upload_resp.ok:
+                    sc["media_id"] = upload_resp.json().get("id")
+                    logger.info(f"Shortcut media uploaded: {sc['media_id']}")
+            except Exception as ue:
+                logger.error(f"Upload shortcut media gagal: {ue}")
+
+        shortcuts.append(sc)
+        save_shortcuts(shortcuts)
+        return jsonify({"status": "created", "shortcut": sc})
+    except Exception as e:
+        logger.error(f"api_shortcuts_create error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/shortcuts/<sc_id>", methods=["PUT"])
+def api_shortcuts_update(sc_id):
+    """Update shortcut (text fields saja, file diupdate via DELETE + POST baru)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        shortcuts = load_shortcuts()
+        for sc in shortcuts:
+            if sc["id"] == sc_id:
+                sc["title"] = body.get("title", sc["title"])
+                sc["isi"] = body.get("isi", sc["isi"])
+                sc["shortcut"] = body.get("shortcut", sc["shortcut"])
+                save_shortcuts(shortcuts)
+                return jsonify({"status": "updated", "shortcut": sc})
+        return jsonify({"error": "Shortcut tidak ditemukan"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/shortcuts/<sc_id>", methods=["DELETE"])
+def api_shortcuts_delete(sc_id):
+    """Hapus shortcut + file attachment-nya."""
+    try:
+        shortcuts = load_shortcuts()
+        sc = next((s for s in shortcuts if s["id"] == sc_id), None)
+        if not sc:
+            return jsonify({"error": "Shortcut tidak ditemukan"}), 404
+        # Hapus file lokal
+        if sc.get("file_path") and os.path.exists(sc["file_path"]):
+            os.remove(sc["file_path"])
+        shortcuts = [s for s in shortcuts if s["id"] != sc_id]
+        save_shortcuts(shortcuts)
+        return jsonify({"status": "deleted"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/shortcuts/<sc_id>/send/<phone>", methods=["POST"])
+def api_shortcuts_send(sc_id, phone):
+    """Kirim shortcut ke kontak (text atau media)."""
+    try:
+        shortcuts = load_shortcuts()
+        sc = next((s for s in shortcuts if s["id"] == sc_id), None)
+        if not sc:
+            return jsonify({"error": "Shortcut tidak ditemukan"}), 404
+
+        content_type = sc.get("content_type", "TEXT")
+
+        if content_type == "TEXT":
+            resp = send_wa_message(phone, sc["isi"])
+            record_outgoing_message(phone, sc["isi"], msg_type="text")
+            return jsonify({"status": "sent", "wa_status": resp.status_code})
+
+        # Media: pakai media_id yang sudah diupload, atau re-upload
+        media_id = sc.get("media_id")
+        if not media_id and sc.get("file_path") and os.path.exists(sc["file_path"]):
+            # Re-upload
+            mime = "application/octet-stream"
+            with open(sc["file_path"], "rb") as f_read:
+                upload_resp = requests.post(
+                    f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/media",
+                    headers={"Authorization": f"Bearer {WA_TOKEN}"},
+                    files={"file": (sc["file_name"], f_read, mime)},
+                    data={"messaging_product": "whatsapp", "type": mime},
+                    timeout=30)
+            if upload_resp.ok:
+                media_id = upload_resp.json().get("id")
+                # Update cached media_id
+                sc["media_id"] = media_id
+                save_shortcuts(shortcuts)
+
+        if not media_id:
+            return jsonify({"error": "File tidak ditemukan atau upload gagal"}), 500
+
+        type_map = {"IMAGE": "image", "DOCUMENT": "document", "VIDEO": "video"}
+        wa_type = type_map.get(content_type, "document")
+        if wa_type == "document":
+            media_payload = {"id": media_id, "filename": sc.get("file_name", "file")}
+        else:
+            media_payload = {"id": media_id}
+
+        send_url = f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages"
+        resp = requests.post(send_url,
+            headers={"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"},
+            json={"messaging_product": "whatsapp", "to": phone, "recipient_type": "individual",
+                  "type": wa_type, wa_type: media_payload},
+            timeout=15)
+        label = f"{'🖼' if wa_type=='image' else '🎥' if wa_type=='video' else '📄'} {sc['title']}"
+        record_outgoing_message(phone, label, msg_type=wa_type)
+        return jsonify({"status": "sent", "wa_status": resp.status_code})
+    except Exception as e:
+        logger.error(f"api_shortcuts_send error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/labels", methods=["GET"])
 def labels_page():
