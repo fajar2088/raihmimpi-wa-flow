@@ -1680,6 +1680,51 @@ def chat_page():
     body = """
   <div class="chat-wrap">
     <div class="chat-list">
+      <!-- Toolbar ala Halosis -->
+      <div style="background:#5b3df0;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="/static/iconWA.png" style="width:22px;height:22px;filter:brightness(0) invert(1);flex-shrink:0;">
+          <div>
+            <div style="color:#fff;font-weight:700;font-size:13px;">WhatsApp</div>
+            <div style="color:#e0d7ff;font-size:11px;">+62 851-1123-4962</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button onclick="resolveAll()" title="Resolve All" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;">✓ Resolve All</button>
+          <button onclick="toggleChatSearch()" title="Cari" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">🔍</button>
+          <button onclick="toggleChatFilter()" title="Filter" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">⚙</button>
+          <button onclick="toggleChatSort()" title="Urutkan" id="sortBtn" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">↕</button>
+        </div>
+      </div>
+
+      <!-- Search bar (hidden by default) -->
+      <div id="chatSearchBar" style="display:none;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;">
+        <input type="text" id="chatSearchInput" placeholder="Cari nama atau nomor HP..." oninput="onChatSearch(this.value)"
+          style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:20px;font-size:13px;box-sizing:border-box;outline:none;">
+      </div>
+
+      <!-- Filter panel (hidden by default) -->
+      <div id="chatFilterPanel" style="display:none;background:#f9fafb;border-bottom:1px solid #eee;padding:12px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Filter</div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Filter Tanggal Pesan</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+          <input type="date" id="filterDateFrom" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;" onchange="applyFilter()">
+          <span style="color:#9ca3af;font-size:12px;">→</span>
+          <input type="date" id="filterDateTo" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;" onchange="applyFilter()">
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Pilih Contact Label</div>
+        <div style="position:relative;">
+          <input type="text" id="filterLabelInput" placeholder="Cari berdasarkan label..." oninput="filterLabelSearch(this.value)"
+            style="width:100%;padding:8px 32px 8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;box-sizing:border-box;">
+          <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#9ca3af;">🔍</span>
+        </div>
+        <div id="filterLabelOptions" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button onclick="clearFilter()" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;background:#fff;cursor:pointer;">Reset</button>
+          <button onclick="applyFilter();toggleChatFilter()" style="flex:1;padding:7px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;">Terapkan</button>
+        </div>
+      </div>
+
       <div class="chat-tabs">
         <div class="chat-tab active" data-status="perlu_dibalas" onclick="setTab(this)">Perlu Dibalas</div>
         <div class="chat-tab" data-status="otomatis" onclick="setTab(this)">Otomatis</div>
@@ -1699,6 +1744,94 @@ def chat_page():
 let currentTab = "perlu_dibalas";
 let currentPhone = null;
 let allContacts = [];
+let chatSearchQuery = "";
+let chatSortOrder = "desc";
+let chatFilterLabel = "";
+let chatFilterDateFrom = "";
+let chatFilterDateTo = "";
+
+// ---- Toolbar functions ----
+function toggleChatSearch() {
+  const bar = document.getElementById("chatSearchBar");
+  const fp = document.getElementById("chatFilterPanel");
+  if (fp) fp.style.display = "none";
+  if (bar) {
+    bar.style.display = bar.style.display === "none" ? "block" : "none";
+    if (bar.style.display === "block") setTimeout(() => document.getElementById("chatSearchInput").focus(), 100);
+  }
+}
+
+function toggleChatFilter() {
+  const fp = document.getElementById("chatFilterPanel");
+  const bar = document.getElementById("chatSearchBar");
+  if (bar) bar.style.display = "none";
+  if (fp) {
+    fp.style.display = fp.style.display === "none" ? "block" : "none";
+    if (fp.style.display === "block") renderFilterLabels();
+  }
+}
+
+function toggleChatSort() {
+  chatSortOrder = chatSortOrder === "desc" ? "asc" : "desc";
+  const btn = document.getElementById("sortBtn");
+  if (btn) btn.title = chatSortOrder === "desc" ? "Terbaru → Terlama" : "Terlama → Terbaru";
+  renderItems();
+}
+
+function onChatSearch(val) {
+  chatSearchQuery = val.toLowerCase();
+  renderItems();
+}
+
+function filterLabelSearch(val) {
+  renderFilterLabels(val);
+}
+
+function renderFilterLabels(search) {
+  const el = document.getElementById("filterLabelOptions");
+  if (!el) return;
+  const labels = window._labelAllLabels || [];
+  const filtered = search ? labels.filter(l => l.name.toLowerCase().includes(search.toLowerCase())) : labels;
+  el.innerHTML = filtered.map(l => {
+    const isSelected = chatFilterLabel === l.name;
+    const bg = isSelected ? (l.bg_color||"#5b3df0") : "#f3f4f6";
+    const color = isSelected ? (l.text_color||"#fff") : "#374151";
+    return `<span onclick="selectFilterLabel('${l.name.replace(/'/g,"\'")}',this)"
+      style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;background:${bg};color:${color};">
+      ${l.name}</span>`;
+  }).join("");
+}
+
+function selectFilterLabel(name) {
+  chatFilterLabel = chatFilterLabel === name ? "" : name;
+  renderFilterLabels(document.getElementById("filterLabelInput").value);
+  applyFilter();
+}
+
+function applyFilter() {
+  chatFilterDateFrom = document.getElementById("filterDateFrom").value;
+  chatFilterDateTo = document.getElementById("filterDateTo").value;
+  renderItems();
+}
+
+function clearFilter() {
+  chatFilterLabel = "";
+  chatFilterDateFrom = "";
+  chatFilterDateTo = "";
+  document.getElementById("filterDateFrom").value = "";
+  document.getElementById("filterDateTo").value = "";
+  document.getElementById("filterLabelInput").value = "";
+  renderFilterLabels();
+  renderItems();
+}
+
+async function resolveAll() {
+  if (!confirm("Tandai semua kontak sebagai Selesai?")) return;
+  try {
+    await fetch("/api/inbox/reset-menu-all", {method:"POST"});
+    loadContacts();
+  } catch(e) { alert("Error: " + e.message); }
+}
 
 // Load master labels untuk render warna di contact list
 window._labelAllLabels = [];
@@ -2402,7 +2535,7 @@ setInterval(() => {
 }, 15000);
 </script>
 """
-    return Response(render_page("chat", "Chat", "Inbox percakapan WhatsApp Raihmimpi", body), mimetype="text/html")
+    return Response(render_page("chat", "Chat", "", body), mimetype="text/html")
 
 
 @app.route("/whatsapp", methods=["GET"])
