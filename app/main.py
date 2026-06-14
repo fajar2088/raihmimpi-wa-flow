@@ -1367,11 +1367,24 @@ LAYOUT_CSS = """
   .attach-menu-item span.icon { font-size:20px; width:28px; text-align:center; }
 
   /* Pengaturan */
-  .settings-tabs { display:flex; gap:10px; margin-bottom:20px; }
-  .settings-tab { padding:10px 20px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#6b7280; box-shadow:0 1px 3px rgba(0,0,0,.06); }
-  .settings-tab.active { background:#5b3df0; color:#fff; }
+  .settings-wrap { display:flex; gap:0; min-height:calc(100vh - 80px); }
+  .settings-tabs { display:flex; flex-direction:column; width:220px; flex-shrink:0; background:#fff; border-right:1px solid #e5e7eb; border-radius:12px 0 0 12px; padding:16px 0; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .settings-tabs-group { padding:4px 12px 2px; font-size:11px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.05em; margin-top:8px; }
+  .settings-tab { display:flex; align-items:center; gap:10px; padding:10px 20px; font-size:14px; font-weight:500; cursor:pointer; color:#374151; border-left:3px solid transparent; transition:all .15s; }
+  .settings-tab:hover { background:#f9fafb; color:#5b3df0; }
+  .settings-tab.active { background:#f0edff; color:#5b3df0; font-weight:700; border-left:3px solid #5b3df0; }
+  .settings-tab .tab-icon { font-size:16px; flex-shrink:0; }
+  .settings-content { flex:1; padding:24px; background:#f9fafb; border-radius:0 12px 12px 0; min-width:0; }
   .settings-section { display:none; }
   .settings-section.active { display:block; }
+  @media (max-width: 768px) {
+    .settings-wrap { flex-direction:column; }
+    .settings-tabs { width:100%; flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid #e5e7eb; border-radius:12px 12px 0 0; padding:8px; gap:4px; }
+    .settings-tabs-group { display:none; }
+    .settings-tab { border-left:none; border-bottom:3px solid transparent; border-radius:8px; padding:8px 12px; white-space:nowrap; font-size:12px; }
+    .settings-tab.active { border-left:none; border-bottom:3px solid #5b3df0; }
+    .settings-content { border-radius:0 0 12px 12px; padding:16px; }
+  }
   .form-group { margin-bottom:16px; }
   .form-group label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151; }
   .form-group textarea, .form-group input[type=text] { width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
@@ -2595,13 +2608,32 @@ setInterval(() => {
 def whatsapp_page():
     """Halaman Pengaturan: Menu Utama (auto-reply) dan WA Blast - sistem Raihmimpi sendiri."""
     body = """
+  <div class="settings-wrap">
   <div class="settings-tabs">
-    <div class="settings-tab active" data-tab="menu-utama" onclick="setSettingsTab(this)">Menu Utama</div>
-    <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">WA Blast</div>
-    <div class="settings-tab" data-tab="label-kontak" onclick="setSettingsTab(this)">Label Kontak</div>
-    <div class="settings-tab" data-tab="shortcuts" onclick="setSettingsTab(this)">Shortcuts Pesan</div>
-    <div class="settings-tab" data-tab="wa-template" onclick="setSettingsTab(this)">Template Blast</div>
+    <div class="settings-tabs-group">Pengaturan Pesan</div>
+    <div class="settings-tab active" data-tab="menu-utama" onclick="setSettingsTab(this)">
+      <span class="tab-icon">💬</span> Menu Utama
+    </div>
+
+    <div class="settings-tabs-group">WhatsApp Blast</div>
+    <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">
+      <span class="tab-icon">📢</span> WA Blast
+    </div>
+    <div class="settings-tab" data-tab="wa-template" onclick="setSettingsTab(this)">
+      <span class="tab-icon">📋</span> Template Blast
+    </div>
+
+    <div class="settings-tabs-group">Kontak & Label</div>
+    <div class="settings-tab" data-tab="label-kontak" onclick="setSettingsTab(this)">
+      <span class="tab-icon">🏷</span> Label Kontak
+    </div>
+
+    <div class="settings-tabs-group">Pesan Cepat</div>
+    <div class="settings-tab" data-tab="shortcuts" onclick="setSettingsTab(this)">
+      <span class="tab-icon">⚡</span> Shortcuts Pesan
+    </div>
   </div>
+  <div class="settings-content">
 
   <div class="settings-section active" id="section-menu-utama">
     <div class="panel">
