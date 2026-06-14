@@ -1446,6 +1446,201 @@ def login_page():
 </body>
 </html>""", mimetype="text/html")
 
+@app.route("/laporan/contact-label", methods=["GET"])
+@login_required
+def laporan_contact_label():
+    today = datetime.now().strftime("%Y-%m-%d")
+    first_month = datetime.now().strftime("%Y-%m-01")
+    # Ambil kategori unik dari labels
+    labels_cfg = load_labels()
+    kategoris = sorted(set(l.get("category","") for l in labels_cfg if l.get("category")))
+    kat_options = "".join(f'<option value="{k}">{k}</option>' for k in kategoris)
+    body = f"""
+  <!-- Header -->
+  <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Nama Contact Label</div>
+        <input type="text" id="searchLabel" placeholder="Cari nama label..." oninput="filterTable()"
+          style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:200px;">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Periode</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" id="filterFrom" value="{first_month}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <span style="color:#9ca3af;">→</span>
+          <input type="date" id="filterTo" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Kategori</div>
+        <select id="filterKategori" onchange="loadContactLabel()" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:140px;">
+          <option value="">Semua</option>
+          {kat_options}
+        </select>
+      </div>
+      <button onclick="loadContactLabel()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
+      <button onclick="exportContactLabel()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+  </div>
+
+  <!-- Summary card -->
+  <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;display:inline-block;">
+    <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Label</div>
+    <div style="font-size:28px;font-weight:800;color:#5b3df0;" id="totalLabelCount">-</div>
+  </div>
+
+  <!-- Tabel List Label -->
+  <div id="labelListView">
+    <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Nama Contact Label</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Kategori</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Contact</th>
+          </tr>
+        </thead>
+        <tbody id="labelListBody">
+          <tr><td colspan="3" style="padding:40px;text-align:center;color:#9ca3af;">Klik Cari untuk memuat data</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detail Label View -->
+  <div id="labelDetailView" style="display:none;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <button onclick="backToList()" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:20px;font-weight:700;">←</button>
+      <div>
+        <div style="font-size:18px;font-weight:800;" id="detailLabelName"></div>
+        <div style="font-size:13px;color:#6b7280;" id="detailPeriode"></div>
+      </div>
+      <button onclick="exportDetailLabel()" style="margin-left:auto;padding:8px 16px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+    <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Nama</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">No WhatsApp</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Type</th>
+          </tr>
+        </thead>
+        <tbody id="labelDetailBody">
+        </tbody>
+      </table>
+      <div style="padding:12px 16px;font-size:13px;color:#6b7280;border-top:1px solid #f3f4f6;" id="detailInfo"></div>
+    </div>
+  </div>
+
+<script>
+var _clData = [];
+var _currentLabel = null;
+
+function loadContactLabel() {{
+  var df = document.getElementById("filterFrom").value;
+  var dt = document.getElementById("filterTo").value;
+  var kat = document.getElementById("filterKategori").value;
+  var tbody = document.getElementById("labelListBody");
+  tbody.innerHTML = "<tr><td colspan=3 style='padding:20px;text-align:center;color:#9ca3af;'>Memuat...</td></tr>";
+
+  fetch("/api/laporan/contact-label?from=" + df + "&to=" + dt + "&kategori=" + encodeURIComponent(kat))
+  .then(function(r) {{ return r.json(); }})
+  .then(function(json) {{
+    _clData = json.labels || [];
+    document.getElementById("totalLabelCount").textContent = json.total_label || 0;
+    filterTable();
+  }})
+  .catch(function() {{
+    tbody.innerHTML = "<tr><td colspan=3 style='color:#dc2626;padding:20px;'>Gagal memuat.</td></tr>";
+  }});
+}}
+
+function filterTable() {{
+  var q = document.getElementById("searchLabel").value.toLowerCase();
+  var filtered = q ? _clData.filter(function(l) {{ return l.name.toLowerCase().indexOf(q) >= 0; }}) : _clData;
+  var tbody = document.getElementById("labelListBody");
+  if (!filtered.length) {{
+    tbody.innerHTML = "<tr><td colspan=3 style='padding:40px;text-align:center;color:#9ca3af;'>Tidak ada data.</td></tr>";
+    return;
+  }}
+  var html = "";
+  var totContact = 0;
+  for (var i=0; i<filtered.length; i++) {{
+    var l = filtered[i];
+    totContact += l.total_contact;
+    html += "<tr style='border-bottom:1px solid #f3f4f6;'>";
+    html += "<td style='padding:12px 16px;'><span onclick='showDetail(" + i + ")' style='color:#5b3df0;cursor:pointer;font-weight:600;text-decoration:underline;'>" + l.name + "</span></td>";
+    html += "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + (l.category||"-") + "</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;font-weight:600;'>" + l.total_contact + "</td>";
+    html += "</tr>";
+  }}
+  // Total row
+  html += "<tr style='background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;'>";
+  html += "<td style='padding:12px 16px;font-size:13px;' colspan=2>TOTAL</td>";
+  html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + totContact + "</td>";
+  html += "</tr>";
+  tbody.innerHTML = html;
+}}
+
+function showDetail(idx) {{
+  var l = _clData[idx];
+  if (!l) return;
+  _currentLabel = l;
+  document.getElementById("labelListView").style.display = "none";
+  document.getElementById("labelDetailView").style.display = "block";
+  var df = document.getElementById("filterFrom").value;
+  var dt = document.getElementById("filterTo").value;
+  document.getElementById("detailLabelName").innerHTML = "<span style='background:" + l.bg_color + ";color:" + l.text_color + ";padding:4px 12px;border-radius:8px;font-size:16px;'>" + l.name + "</span>";
+  document.getElementById("detailPeriode").textContent = "Periode: " + df + " sampai " + dt;
+  var contacts = l.contacts || [];
+  var tbody = document.getElementById("labelDetailBody");
+  var typeColor = {{"User Initiated":"#2563eb","Business Initiated":"#16a34a","Ads":"#f59e0b"}};
+  tbody.innerHTML = contacts.map(function(c) {{
+    var tc = typeColor[c.type] || "#6b7280";
+    return "<tr style='border-bottom:1px solid #f3f4f6;'>" +
+      "<td style='padding:12px 16px;font-size:13px;font-weight:600;'>" + c.nama + "</td>" +
+      "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>+" + c.phone + "</td>" +
+      "<td style='padding:12px 16px;'><span style='font-size:12px;font-weight:600;color:" + tc + ";'>" + c.type + "</span></td>" +
+      "</tr>";
+  }}).join("");
+  document.getElementById("detailInfo").textContent = "Menampilkan " + contacts.length + " kontak";
+}}
+
+function backToList() {{
+  document.getElementById("labelDetailView").style.display = "none";
+  document.getElementById("labelListView").style.display = "block";
+}}
+
+function exportContactLabel() {{
+  if (!_clData.length) {{ alert("Tidak ada data. Klik Cari dulu."); return; }}
+  var rows = [["Nama Contact Label","Kategori","Total Contact"]];
+  _clData.forEach(function(l) {{ rows.push([l.name, l.category||"-", l.total_contact]); }});
+  var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href=url; a.download="contact_label.csv"; a.click();
+  URL.revokeObjectURL(url);
+}}
+
+function exportDetailLabel() {{
+  if (!_currentLabel) return;
+  var contacts = _currentLabel.contacts || [];
+  var rows = [["Nama","No WhatsApp","Type"]];
+  contacts.forEach(function(c) {{ rows.push([c.nama, "+"+c.phone, c.type]); }});
+  var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href=url; a.download="detail_"+_currentLabel.name+".csv"; a.click();
+  URL.revokeObjectURL(url);
+}}
+
+loadContactLabel();
+</script>
+"""
+    return Response(render_page("laporan-contact-label", "Laporan Contact Label", "", body), mimetype="text/html")
+
 @app.route("/laporan/summary", methods=["GET"])
 @login_required
 def laporan_summary():
@@ -2312,6 +2507,110 @@ def api_laporan_summary():
         "total_pct_all": total_pct_all
     })
 
+@app.route("/api/laporan/contact-label", methods=["GET"])
+@login_required
+def api_laporan_contact_label():
+    """API laporan contact label - list label dengan total kontak unik."""
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    search_label = request.args.get("label", "").strip().lower()
+    kategori = request.args.get("kategori", "").strip()
+
+    inbox = load_inbox()
+    contacts = inbox.get("contacts", {})
+    messages_db = inbox.get("messages", {})
+    labels_cfg = load_labels()
+
+    # Tentukan type per kontak (User Initiated / Business Initiated / Ads)
+    def get_contact_type(phone, contact):
+        if contact.get("ctwa_clid") or contact.get("ad_headline"):
+            return "Ads"
+        msgs = messages_db.get(phone, [])
+        if not msgs:
+            msgs = contact.get("messages", [])
+        # Filter berdasarkan tanggal
+        for msg in sorted(msgs, key=lambda m: m.get("timestamp", "")):
+            ts = msg.get("timestamp", "")
+            if not ts:
+                continue
+            date_part = ts[:10]
+            if date_from and date_part < date_from:
+                continue
+            if date_to and date_part > date_to:
+                continue
+            return "User Initiated" if msg.get("direction", "in") == "in" else "Business Initiated"
+        return "User Initiated"
+
+    # Kumpulkan kontak per label dalam rentang tanggal
+    label_data = {}  # label_name -> {phones: set, contacts: []}
+
+    for phone, contact in contacts.items():
+        # Cek apakah kontak aktif dalam rentang tanggal
+        last_msg_at = contact.get("last_message_at", "")
+        if not last_msg_at:
+            continue
+        date_part = last_msg_at[:10]
+
+        # Cek pesan dalam rentang
+        msgs = messages_db.get(phone, [])
+        if not msgs:
+            msgs = contact.get("messages", [])
+        
+        in_range = False
+        if not date_from and not date_to:
+            in_range = True
+        else:
+            for msg in msgs:
+                ts = msg.get("timestamp", "")
+                if not ts:
+                    continue
+                dp = ts[:10]
+                if date_from and dp < date_from:
+                    continue
+                if date_to and dp > date_to:
+                    continue
+                in_range = True
+                break
+
+        if not in_range:
+            continue
+
+        contact_labels = contact.get("labels", [])
+        for lname in contact_labels:
+            if lname not in label_data:
+                label_data[lname] = {"phones": set(), "contacts": []}
+            if phone not in label_data[lname]["phones"]:
+                label_data[lname]["phones"].add(phone)
+                label_data[lname]["contacts"].append({
+                    "nama": contact.get("name", phone),
+                    "phone": phone,
+                    "type": get_contact_type(phone, contact)
+                })
+
+    # Build result
+    result = []
+    for lcfg in labels_cfg:
+        lname = lcfg["name"]
+        lkat = lcfg.get("category", "-")
+
+        if search_label and search_label not in lname.lower():
+            continue
+        if kategori and lkat != kategori:
+            continue
+
+        data = label_data.get(lname, {"phones": set(), "contacts": []})
+        result.append({
+            "name": lname,
+            "category": lkat,
+            "bg_color": lcfg.get("bg_color", "#e5e7eb"),
+            "text_color": lcfg.get("text_color", "#374151"),
+            "total_contact": len(data["phones"]),
+            "contacts": data["contacts"]
+        })
+
+    total_label = len(result)
+    return jsonify({"labels": result, "total_label": total_label})
+
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
     """Download template Excel untuk upload nomor blast."""
@@ -2624,6 +2923,7 @@ def render_sidebar(active):
         '<div style="padding:4px 0 4px 16px;">' +
         f'<a href="/laporan/chat-harian" style="{sub_link_style}"><span>&#x1F4AC;</span> Chat Harian</a>' +
         f'<a href="/laporan/summary" style="{sub_link_style}"><span>&#x1F4CB;</span> Summary</a>' +
+        f'<a href="/laporan/contact-label" style="{sub_link_style}"><span>&#x1F3F7;</span> Contact Label</a>' +
         '</div></details>'
     )
 
