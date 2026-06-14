@@ -2242,6 +2242,7 @@ reloadChatTemplates();
 function toggleAttachMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById("attachMenu");
+  renderAttachTemplates();
   menu.classList.toggle("open");
 }
 document.addEventListener("click", function() {
