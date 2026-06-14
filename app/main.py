@@ -2913,18 +2913,19 @@ def api_laporan_tracking_campaign():
                     "ad_id": ad_id,
                     "phones": set(),
                     "leads": set(),
-                    "leads": set(),
                     "total_contacts_set": set(),
                     "view_content": set(),
+                    "add_to_cart": set(),
                     "purchase": set(),
                     "contacts_detail": []
                 }
 
             if phone not in campaigns[bl]["phones"]:
                 campaigns[bl]["phones"].add(phone)
+                campaigns[bl]["total_contacts_set"].add(phone)
                 is_valid_ctwa = ctwa_clid and len(ctwa_clid) >= 20 and not ctwa_clid.startswith("clid_test") and not ctwa_clid.startswith("test_")
                 if is_valid_ctwa:
-                campaigns[bl]["total_contacts_set"].add(phone)
+                    campaigns[bl]["leads"].add(phone)
                     campaigns[bl]["leads"].add(phone)
                 if not campaigns[bl]["ad_id"] and ad_id:
                     campaigns[bl]["ad_id"] = ad_id
