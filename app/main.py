@@ -2846,8 +2846,7 @@ function updateTemplatePreview() {
     .replace(/\*(.*?)\*/g,"<strong>$1</strong>")
     .replace(/_(.*?)_/g,"<em>$1</em>")
     .replace(/~(.*?)~/g,"<s>$1</s>")
-    .replace(/
-/g,"<br>");
+    .split(String.fromCharCode(10)).join("<br>");
   bEl.innerHTML = bodyHtml;
 
   // Footer
