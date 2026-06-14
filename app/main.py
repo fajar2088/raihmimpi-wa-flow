@@ -4025,6 +4025,63 @@ async function onBlastFileUpload(input) {
   }
 }
 
+function downloadBlastTemplate() {
+  window.open("/api/blast/template-download", "_blank");
+}
+
+async function onBlastFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById("blastFileMsg");
+  msgEl.style.color = "#6b7280";
+  msgEl.textContent = "Memproses file...";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/api/blast/upload-contacts", {method:"POST", body:formData});
+    const json = await res.json();
+    if (json.error) { msgEl.style.color="#dc2626"; msgEl.textContent="Error: "+json.error; return; }
+
+    const uploaded = json.contacts || [];
+    if (!uploaded.length) { msgEl.style.color="#dc2626"; msgEl.textContent="Tidak ada kontak valid di file."; return; }
+
+    // Gabungkan dengan kontak yang ada, hindari duplikat
+    const existingPhones = new Set(_blastAllContacts.map(c => c.phone));
+    const newContacts = uploaded.filter(c => !existingPhones.has(c.phone));
+
+    // Tambah kontak dari file ke daftar (mark sebagai uploaded)
+    const uploadedMarked = uploaded.map(c => ({...c, fromFile: true}));
+
+    // Render kontak dari file (ganti daftar kontak dengan yang dari file)
+    const el = document.getElementById("blastContacts");
+    const countEl = document.getElementById("blastCount");
+
+    el.innerHTML = uploadedMarked.map(c => `
+      <div class="blast-contact-item">
+        <input type="checkbox" class="blast-chk" value="${c.phone}" id="bchk_${c.phone}" checked>
+        <label for="bchk_${c.phone}" style="cursor:pointer;flex:1;">
+          <div style="font-size:13px;font-weight:600;">${c.name||c.phone}</div>
+          <div style="font-size:11px;color:#9ca3af;">+${c.phone}</div>
+        </label>
+        <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 6px;border-radius:4px;">dari file</span>
+      </div>
+    `).join("");
+
+    document.querySelectorAll(".blast-chk").forEach(chk => {
+      chk.addEventListener("change", updateBlastCount);
+    });
+    updateBlastCount();
+
+    msgEl.style.color = "#16a34a";
+    msgEl.textContent = `✓ ${uploaded.length} kontak berhasil dimuat dari file. Semua otomatis dipilih.`;
+  } catch(e) {
+    msgEl.style.color = "#dc2626";
+    msgEl.textContent = "Error: " + e.message;
+  }
+}
+
 function onScheduleChange(el) {
   document.getElementById("blastScheduleInput").style.display =
     el.value === "schedule" ? "block" : "none";
