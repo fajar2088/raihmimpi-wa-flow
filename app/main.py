@@ -1298,16 +1298,19 @@ LAYOUT_CSS = """
   .detail-row .val { font-weight:600; text-align:right; }
 
   /* Chat / Inbox */
-  .chat-wrap { display:flex; height:calc(100vh - 52px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .chat-wrap { display:flex; height:calc(100vh - 52px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); max-width:100%; }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
   @media (max-width: 768px) {
-    .chat-wrap { height:calc(100dvh - 20px); border-radius:8px; position:relative; }
+    .chat-wrap { height:calc(100dvh - 20px); border-radius:8px; position:relative; overflow:hidden; width:100%; }
     .chat-list { width:100%; border-right:none; position:absolute; inset:0; z-index:10; background:#fff; transition:transform .25s; }
     .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
-    .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; }
+    .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column; overflow:hidden; width:100%; max-width:100%; }
     .chat-panel.show-mobile { transform:translateX(0); }
-    .mobile-back-btn { display:flex !important; }
+    .chat-header { flex-shrink:0; position:sticky; top:0; z-index:20; }
+    .chat-messages { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; min-height:0; }
+    .chat-input-bar { flex-shrink:0; position:sticky; bottom:0; background:#fff; z-index:20; padding-bottom:env(safe-area-inset-bottom, 0px); }
     .main { padding:12px; }
+    body { overflow:hidden; position:fixed; width:100%; }
   }
   .mobile-back-btn { display:none; }
   @media (max-width: 768px) { .mobile-back-btn { display:inline-flex !important; } }
@@ -1328,7 +1331,7 @@ LAYOUT_CSS = """
   .chat-label { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; background:#e0e7ff; color:#4338ca; text-transform:uppercase; }
   .chat-unread { background:#ef4444; color:#fff; font-size:11px; font-weight:700; border-radius:10px; min-width:20px; height:20px; display:flex; align-items:center; justify-content:center; padding:0 6px; }
   .chat-empty { flex:1; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; flex-direction:column; gap:12px; text-align:center; padding:40px; }
-  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; height:100%; }
+  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; height:100%; max-width:100%; }
   .chat-header { padding:16px 20px; border-bottom:1px solid #eee; display:flex; align-items:center; gap:12px; }
   .chat-header .chat-avatar { width:36px; height:36px; font-size:13px; }
   .chat-header-name { font-weight:700; font-size:15px; }
