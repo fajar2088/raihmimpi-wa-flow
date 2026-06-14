@@ -1301,16 +1301,17 @@ LAYOUT_CSS = """
   .chat-wrap { display:flex; height:calc(100vh - 52px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); max-width:100%; }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
   @media (max-width: 768px) {
-    .chat-wrap { height:calc(100dvh - 20px); border-radius:8px; position:relative; overflow:hidden; width:100%; }
+    html, body { height:100%; overflow:hidden; }
+    .main { padding:8px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; }
+    .chat-wrap { height:100%; border-radius:8px; position:relative; overflow:hidden; width:100%; flex:1; }
     .chat-list { width:100%; border-right:none; position:absolute; inset:0; z-index:10; background:#fff; transition:transform .25s; }
     .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
-    .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column; overflow:hidden; width:100%; max-width:100%; }
+    .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column; width:100%; max-width:100%; overflow:hidden; }
     .chat-panel.show-mobile { transform:translateX(0); }
-    .chat-header { flex-shrink:0; position:sticky; top:0; z-index:20; }
-    .chat-messages { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; min-height:0; }
-    .chat-input-bar { flex-shrink:0; position:sticky; bottom:0; background:#fff; z-index:20; padding-bottom:env(safe-area-inset-bottom, 0px); }
-    .main { padding:12px; }
-    body { overflow:hidden; position:fixed; width:100%; }
+    .chat-header { flex-shrink:0; z-index:20; }
+    .chat-messages { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    .chat-input-bar { flex-shrink:0; z-index:20; padding-bottom:env(safe-area-inset-bottom, 4px); width:100%; box-sizing:border-box; }
+    .shortcut-popup { bottom:0; }
   }
   .mobile-back-btn { display:none; }
   @media (max-width: 768px) { .mobile-back-btn { display:inline-flex !important; } }
@@ -1342,9 +1343,9 @@ LAYOUT_CSS = """
   .chat-bubble.out { background:#f3f4f6; color:#1f2937; align-self:flex-end; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
   .chat-date-separator { align-self:center; background:#fff; border:1px solid #e5e7eb; color:#6b7280; font-size:12px; padding:6px 16px; border-radius:20px; margin:8px 0; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .chat-input-bar { display:flex; gap:8px; padding:14px 16px; border-top:1px solid #eee; align-items:center; position:sticky; bottom:0; background:#fff; z-index:10; }
-  .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:16px; }
-  .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
+  .chat-input-bar { display:flex; gap:8px; padding:10px 12px; border-top:1px solid #eee; align-items:center; position:sticky; bottom:0; background:#fff; z-index:10; box-sizing:border-box; width:100%; }
+  .chat-input-bar input { flex:1; min-width:0; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:16px; box-sizing:border-box; }
+  .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 18px; font-weight:600; font-size:14px; cursor:pointer; flex-shrink:0; white-space:nowrap; }
   .chat-input-bar button:hover { background:#4c30d9; }
   .shortcut-popup { position:absolute;bottom:70px;left:0;right:0;background:#fff;border-radius:12px 12px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.12);max-height:60vh;overflow-y:auto;z-index:300;display:none; }
   .shortcut-popup.open { display:block; }
@@ -1354,7 +1355,7 @@ LAYOUT_CSS = """
   .shortcut-item:hover { background:#f9fafb; }
   .shortcut-item-key { font-size:13px;font-weight:700;color:#5b3df0;margin-bottom:4px; }
   .shortcut-item-body { font-size:13px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-  .attach-btn { background:#f3f4f6; border:none; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#5b3df0; transition:background .15s; }
+  .attach-btn { flex-shrink:0; background:#f3f4f6; border:none; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#5b3df0; transition:background .15s; }
   .attach-btn:hover { background:#e0e7ff; }
   .attach-menu { position:absolute; bottom:70px; left:16px; background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.13); min-width:220px; overflow:hidden; z-index:200; display:none; }
   .attach-menu.open { display:block; }
