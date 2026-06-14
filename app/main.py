@@ -3028,8 +3028,10 @@ async function setTemplateChat(id, name, checked) {
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({name, enabled: checked})
     });
-    // Reload attachment menu shortcuts
-    await reloadChatTemplates();
+    // reloadChatTemplates hanya ada di halaman /chat
+    if (typeof reloadChatTemplates === "function") {
+      await reloadChatTemplates();
+    }
   } catch(e) { alert("Error: " + e.message); }
 }
 
