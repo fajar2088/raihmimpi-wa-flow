@@ -1890,7 +1890,7 @@ async function editContactLabel(phone) {
               style="border:none;outline:none;font-size:13px;flex:1;min-width:80px;background:transparent;color:#374151;">
           </div>
         </div>
-        <div style="overflow-y:auto;flex:1;max-height:320px;">
+        <div style="overflow-y:auto;flex:1;min-height:200px;max-height:320px;border-top:1px solid #f3f4f6;">
           ${listHtml}
         </div>
         <div style="padding:14px 16px;border-top:1px solid #f3f4f6;flex-shrink:0;">
