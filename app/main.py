@@ -1395,7 +1395,7 @@ def render_sidebar(active):
         for key, url, icon, label in items
     )
     return f"""<div class="sidebar">
-  <div class="logo">🤲 Raihmimpi</div>
+  <div class="logo" style="padding:12px 16px;"><img src="/static/IconRM.png" style="height:36px;object-fit:contain;"></div>
   {links}
 </div>"""
 
