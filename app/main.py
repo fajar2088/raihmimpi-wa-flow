@@ -2969,6 +2969,12 @@ def api_laporan_tracking_campaign():
         for cname, cdata in campaigns.items():
             if phone in cdata["phones"]:
                 cdata["add_to_cart"].add(phone)
+                for ct in cdata["contacts_detail"]:
+                    if ct["phone"] == phone:
+                        if status == "lunas":
+                            ct["event"] = "Purchase"
+                        elif ct.get("event") not in ("Purchase",):
+                            ct["event"] = "Add to Cart"
                 if status == "lunas":
                     cdata["purchase"].add(phone)
 
