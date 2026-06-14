@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify, Response
 from pywa.utils import default_flow_request_decryptor, default_flow_response_encryptor
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1352,7 +1352,7 @@ def render_sidebar(active):
         ("pesanan", "/pesanan", "📋", "Pesanan"),
         ("chat", "/chat", "💬", "Chat"),
         ("kampanye", "/kampanye", "🎯", "Kampanye"),
-        ("whatsapp", "/whatsapp", "📱", "WhatsApp"),
+        ("whatsapp", "/whatsapp", '<img src="/static/iconWA.png" style="width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);vertical-align:middle;">', "WhatsApp"),
     ]
     links = "".join(
         f'<a href="{url}" class="{"active" if key == active else ""}"><span>{icon}</span><span>{label}</span></a>'
