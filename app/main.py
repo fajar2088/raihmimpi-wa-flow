@@ -1682,18 +1682,18 @@ def chat_page():
     <div class="chat-list">
       <!-- Toolbar ala Halosis -->
       <div style="background:#5b3df0;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <img src="/static/iconWA.png" style="width:22px;height:22px;filter:brightness(0) invert(1);flex-shrink:0;">
-          <div>
-            <div style="color:#fff;font-weight:700;font-size:13px;">WhatsApp</div>
-            <div style="color:#e0d7ff;font-size:11px;">+62 851-1123-4962</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <img src="/static/iconWA.png" style="width:18px;height:18px;filter:brightness(0) invert(1);flex-shrink:0;">
+          <div style="line-height:1.2;">
+            <div style="color:#fff;font-weight:700;font-size:11px;">WhatsApp</div>
+            <div style="color:#e0d7ff;font-size:10px;">+62 851-1123-4962</div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <button onclick="resolveAll()" title="Resolve All" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;">✓ Resolve All</button>
-          <button onclick="toggleChatSearch()" title="Cari" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">🔍</button>
-          <button onclick="toggleChatFilter()" title="Filter" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">⚙</button>
-          <button onclick="toggleChatSort()" title="Urutkan" id="sortBtn" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">↕</button>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button onclick="resolveAll()" title="Resolve All" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:600;white-space:nowrap;">✓ Resolve</button>
+          <button onclick="toggleChatSearch()" title="Cari" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;">🔍</button>
+          <button onclick="toggleChatFilter()" title="Filter" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;">⚙</button>
+          <button onclick="toggleChatSort()" title="Urutkan" id="sortBtn" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;">↕</button>
         </div>
       </div>
 
