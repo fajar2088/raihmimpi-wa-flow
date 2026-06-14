@@ -1985,6 +1985,25 @@ def render_sidebar(active):
         f'<a href="{url}" class="{"active" if key == active else ""}"><span>{icon}</span><span>{label}</span></a>'
         for key, url, icon, label in items
     )
+    is_admin = session.get("user_role") == "ADMINISTRATOR"
+    pengaturan_menu = ""
+    if is_admin:
+        pengaturan_open = "open" if active == "pengaturan" else ""
+        pengaturan_menu = f'''
+  <details {pengaturan_open} style="margin-top:4px;">
+    <summary style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:rgba(255,255,255,.85);font-size:14px;font-weight:500;list-style:none;border-radius:8px;transition:background .15s;"
+      onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background=''">
+      <span>⚙️</span><span>Pengaturan</span>
+      <span style="margin-left:auto;font-size:11px;opacity:.6;">▾</span>
+    </summary>
+    <div style="padding:4px 0 4px 16px;">
+      <a href="/pengaturan/pengguna" style="display:flex;align-items:center;gap:8px;padding:8px 16px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border-radius:8px;transition:background .15s;"
+        onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''">
+        <span>👥</span> Daftar Pengguna
+      </a>
+    </div>
+  </details>'''
+    logout_btn = '<a href="/logout" style="display:flex;align-items:center;gap:10px;padding:10px 20px;color:rgba(255,255,255,.6);font-size:14px;text-decoration:none;margin-top:8px;border-radius:8px;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background=''"><span>🚪</span> Logout</a>'
     return f"""<div class="sidebar">
   <div class="logo" style="padding:12px 16px;"><img src="/static/IconRM.png" style="height:36px;object-fit:contain;"></div>
   <div style="padding:8px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:4px;">
@@ -1993,6 +2012,8 @@ def render_sidebar(active):
     <div style="font-size:11px;color:rgba(255,255,255,.5);">{session.get('user_role','')}</div>
   </div>
   {links}
+  {pengaturan_menu}
+  {logout_btn}
 </div>"""
 
 def render_page(active, title, subtitle, body_html, extra_head=""):
