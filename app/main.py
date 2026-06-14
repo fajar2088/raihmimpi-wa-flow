@@ -1446,6 +1446,149 @@ def login_page():
 </body>
 </html>""", mimetype="text/html")
 
+@app.route("/laporan/summary", methods=["GET"])
+@login_required
+def laporan_summary():
+    today = datetime.now().strftime("%Y-%m-%d")
+    first_month = datetime.now().strftime("%Y-%m-01")
+    body = f"""
+  <!-- Filter -->
+  <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Group By</div>
+        <select id="groupBy" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:140px;">
+          <option value="day">Day (Hari)</option>
+          <option value="month">Month (Bulan)</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Periode</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" id="filterFrom" value="{first_month}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <span style="color:#9ca3af;">→</span>
+          <input type="date" id="filterTo" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+        </div>
+      </div>
+      <button onclick="loadSummary()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
+      <button onclick="exportSummary()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+  </div>
+
+  <!-- Tabel -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;min-width:1000px;" id="summaryTable">
+        <thead id="summaryHead">
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Periode</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Jumlah Contact</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Jumlah Unik Contact</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">% Sudah Diberikan Label</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#fef9c3;">Non Donatur</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#fef9c3;">No Respon</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#fef9c3;">Respon</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#fef9c3;">Donatur Rutin</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Keluhan</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Kerjasama</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Laporan</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Galang Dana</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Donasi</th>
+            <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;background:#dcfce7;">Lainnya</th>
+          </tr>
+        </thead>
+        <tbody id="summaryBody">
+          <tr><td colspan="14" style="padding:40px;text-align:center;color:#9ca3af;">Klik Cari untuk memuat data</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+var _summaryData = [];
+var _labelCols = ["Non Donatur","No Respon","Respon","Donatur Rutin","Keluhan","Kerjasama","Laporan","Galang dana","Donasi","Lainnya"];
+
+function loadSummary() {{
+  var df = document.getElementById("filterFrom").value;
+  var dt = document.getElementById("filterTo").value;
+  var gb = document.getElementById("groupBy").value;
+  var tbody = document.getElementById("summaryBody");
+  tbody.innerHTML = "<tr><td colspan=14 style='padding:20px;text-align:center;color:#9ca3af;'>Memuat...</td></tr>";
+
+  fetch("/api/laporan/summary?from=" + df + "&to=" + dt + "&group_by=" + gb)
+  .then(function(r) {{ return r.json(); }})
+  .then(function(json) {{
+    _summaryData = json.rows || [];
+    if (!_summaryData.length) {{
+      tbody.innerHTML = "<tr><td colspan=14 style='padding:40px;text-align:center;color:#9ca3af;'>Tidak ada data.</td></tr>";
+      return;
+    }}
+    var html = "";
+    var totContact=0, totUnik=0, totLabel={{}};
+    _labelCols.forEach(function(l) {{ totLabel[l]=0; }});
+
+    for (var i=0; i<_summaryData.length; i++) {{
+      var r = _summaryData[i];
+      totContact += r.jumlah_contact;
+      totUnik += r.jumlah_unik;
+      _labelCols.forEach(function(l) {{ totLabel[l] += (r.labels[l]||0); }});
+
+      var pct = r.pct_label + "%";
+      var pctColor = r.pct_label >= 70 ? "#16a34a" : r.pct_label >= 40 ? "#d97706" : "#dc2626";
+      html += "<tr style='border-bottom:1px solid #f3f4f6;'>";
+      html += "<td style='padding:12px 16px;font-size:13px;font-weight:600;'>" + r.group_label + "</td>";
+      html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + r.jumlah_contact + "</td>";
+      html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + r.jumlah_unik + "</td>";
+      html += "<td style='padding:12px 16px;font-size:13px;text-align:center;font-weight:700;color:" + pctColor + ";'>" + pct + "</td>";
+      _labelCols.forEach(function(l) {{
+        var bg = l === "Non Donatur" || l === "No Respon" || l === "Respon" || l === "Donatur Rutin" ? "#fef9c3" : "#f0fdf4";
+        html += "<td style='padding:12px 16px;font-size:13px;text-align:center;background:" + bg + ";'>" + (r.labels[l]||0) + "</td>";
+      }});
+      html += "</tr>";
+    }}
+
+    // Total row
+    var totPct = totUnik > 0 ? Math.round(Object.values(totLabel).reduce(function(a,b){{return a+b;}},0) / totUnik * 10) / 10 : 0;
+    html += "<tr style='background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;'>";
+    html += "<td style='padding:12px 16px;font-size:13px;'>TOTAL</td>";
+    html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + totContact + "</td>";
+    html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + totUnik + "</td>";
+    html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + totPct + "%</td>";
+    _labelCols.forEach(function(l) {{
+      html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + (totLabel[l]||0) + "</td>";
+    }});
+    html += "</tr>";
+
+    tbody.innerHTML = html;
+  }})
+  .catch(function() {{
+    tbody.innerHTML = "<tr><td colspan=14 style='color:#dc2626;padding:20px;'>Gagal memuat.</td></tr>";
+  }});
+}}
+
+function exportSummary() {{
+  if (!_summaryData.length) {{ alert("Tidak ada data. Klik Cari dulu."); return; }}
+  var headers = ["Periode","Jumlah Contact","Jumlah Unik Contact","% Sudah Label"].concat(_labelCols);
+  var rows = [headers];
+  for (var i=0; i<_summaryData.length; i++) {{
+    var r = _summaryData[i];
+    var row = [r.group_label, r.jumlah_contact, r.jumlah_unik, r.pct_label+"%"];
+    _labelCols.forEach(function(l) {{ row.push(r.labels[l]||0); }});
+    rows.push(row);
+  }}
+  var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href=url; a.download="laporan_summary_"+document.getElementById("filterFrom").value+".csv"; a.click();
+  URL.revokeObjectURL(url);
+}}
+
+loadSummary();
+</script>
+"""
+    return Response(render_page("laporan-summary", "Laporan Summary", "Ringkasan percakapan berdasarkan periode", body), mimetype="text/html")
+
 @app.route("/laporan/chat-harian", methods=["GET"])
 @login_required
 def laporan_chat_harian():
@@ -1934,6 +2077,100 @@ def api_laporan_chat_harian():
         "total_unik": total_unik
     })
 
+@app.route("/api/laporan/summary", methods=["GET"])
+@login_required
+def api_laporan_summary():
+    """API Laporan Summary - group by Day atau Month."""
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    group_by = request.args.get("group_by", "day")  # day atau month
+
+    inbox = load_inbox()
+    contacts = inbox.get("contacts", {})
+    messages_db = inbox.get("messages", {})
+
+    # Label columns yang dimonitor
+    LABEL_COLS = ["Non Donatur", "No Respon", "Respon", "Donatur Rutin",
+                  "Keluhan", "Kerjasama", "Laporan", "Galang dana", "Donasi", "Lainnya"]
+
+    # Kumpulkan data per kontak per hari
+    contact_days = {}  # key: (group_key, phone)
+
+    for phone, contact in contacts.items():
+        msgs = messages_db.get(phone, [])
+        if not msgs:
+            msgs = contact.get("messages", [])
+        if not msgs and contact.get("last_message_at"):
+            msgs = [{"direction": "in", "timestamp": contact.get("last_message_at", ""), "type": "text"}]
+
+        days_seen = set()
+        for msg in msgs:
+            ts = msg.get("timestamp", "")
+            if not ts:
+                continue
+            date_part = ts[:10]
+            if date_from and date_part < date_from:
+                continue
+            if date_to and date_part > date_to:
+                continue
+
+            # Tentukan group key
+            try:
+                from datetime import datetime as dt2
+                d = dt2.strptime(date_part, "%Y-%m-%d")
+                if group_by == "month":
+                    group_key = d.strftime("%Y-%m")
+                    group_label = d.strftime("%B")
+                else:
+                    # Day of week
+                    days_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+                    group_key = str(d.weekday())
+                    group_label = days_id[d.weekday()]
+            except Exception:
+                continue
+
+            day_key = (group_key, group_label, phone)
+            if day_key not in days_seen:
+                days_seen.add(day_key)
+                if (group_key, group_label) not in contact_days:
+                    contact_days[(group_key, group_label)] = {}
+                if phone not in contact_days[(group_key, group_label)]:
+                    contact_days[(group_key, group_label)][phone] = {
+                        "labels": contact.get("labels", []),
+                        "msg_count": 0,
+                        "has_incoming": False
+                    }
+                contact_days[(group_key, group_label)][phone]["msg_count"] += 1
+                if msg.get("direction", "in") == "in":
+                    contact_days[(group_key, group_label)][phone]["has_incoming"] = True
+
+    # Build rows
+    rows = []
+    for (group_key, group_label), phones_data in contact_days.items():
+        jumlah_contact = sum(1 for p, d in phones_data.items() if d["has_incoming"])
+        jumlah_unik = len(set(p for p, d in phones_data.items() if d["has_incoming"]))
+        sudah_label = sum(1 for p, d in phones_data.items() if d["has_incoming"] and d["labels"])
+        pct_label = round(sudah_label / jumlah_unik * 100, 1) if jumlah_unik > 0 else 0
+
+        label_counts = {}
+        for col in LABEL_COLS:
+            label_counts[col] = sum(1 for p, d in phones_data.items()
+                                   if d["has_incoming"] and col in d["labels"])
+
+        rows.append({
+            "group_key": group_key,
+            "group_label": group_label,
+            "jumlah_contact": jumlah_contact,
+            "jumlah_unik": jumlah_unik,
+            "pct_label": pct_label,
+            "labels": label_counts
+        })
+
+    # Sort
+    rows.sort(key=lambda x: x["group_key"])
+
+    return jsonify({"rows": rows, "label_cols": LABEL_COLS})
+
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
     """Download template Excel untuk upload nomor blast."""
@@ -2221,7 +2458,7 @@ def render_sidebar(active):
         ("chat", "/chat", "&#x1F4AC;", "Chat"),
         ("kampanye", "/kampanye", "&#x1F3AF;", "Kampanye"),
         ("whatsapp", "/whatsapp", "WA", "WhatsApp"),
-        ("laporan", "/laporan/chat-harian", "&#x1F4CA;", "Laporan"),
+
     ]
     html_links = ""
     for key, url, icon, label in items:
@@ -2235,8 +2472,21 @@ def render_sidebar(active):
     is_admin = session.get("user_role") == "ADMINISTRATOR"
     pengaturan_open = "open" if active == "pengaturan" else ""
     
+    sub_link_style = "display:flex;align-items:center;gap:8px;padding:8px 16px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border-radius:8px;"
+    laporan_open = "open" if active in ("laporan", "laporan-summary") else ""
+    laporan_block = (
+        f'<details {laporan_open} style="margin-top:4px;">' +
+        '<summary style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;' +
+        'color:rgba(255,255,255,.85);font-size:14px;font-weight:500;list-style:none;border-radius:8px;">' +
+        '<span>&#x1F4CA;</span><span>Laporan</span>' +
+        '<span style="margin-left:auto;font-size:11px;opacity:.6;">&#9660;</span></summary>' +
+        '<div style="padding:4px 0 4px 16px;">' +
+        f'<a href="/laporan/chat-harian" style="{sub_link_style}"><span>&#x1F4AC;</span> Chat Harian</a>' +
+        f'<a href="/laporan/summary" style="{sub_link_style}"><span>&#x1F4CB;</span> Summary</a>' +
+        '</div></details>'
+    )
+
     if is_admin:
-        sub_link_style = "display:flex;align-items:center;gap:8px;padding:8px 16px;color:rgba(255,255,255,.75);font-size:13px;text-decoration:none;border-radius:8px;"
         pengaturan_block = (
             f'<details {pengaturan_open} style="margin-top:4px;">' +
             '<summary style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;' +
@@ -2266,6 +2516,7 @@ def render_sidebar(active):
         f'<div style="font-size:13px;font-weight:700;color:#fff;">{user_nama}</div>' +
         '</div>' +
         html_links +
+        laporan_block +
         pengaturan_block +
         logout_block +
         '</div>'
