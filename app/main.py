@@ -2943,9 +2943,11 @@ def api_laporan_tracking_campaign():
         status = t.get("status", "")
         # Cek apakah phone ini ada di campaign
         for cname, cdata in campaigns.items():
-            if phone in cdata["phones"]:
-                cdata["add_to_cart"].add(phone)
-                if status == "lunas":
+        contact_c = contacts.get(phone, {})
+        ctwa_c = contact_c.get("ctwa_clid", "") or ""
+        is_valid_c = ctwa_c and len(ctwa_c) >= 20 and not ctwa_c.startswith("clid_test") and not ctwa_c.startswith("test_")
+        if not is_valid_c:
+            continue
                     cdata["purchase"].add(phone)
 
     # Build result
