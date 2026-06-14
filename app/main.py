@@ -2183,7 +2183,26 @@ def api_laporan_summary():
     # Sort
     rows.sort(key=lambda x: x["group_key"])
 
-    return jsonify({"rows": rows, "label_cols": LABEL_COLS})
+    # total_unik_all = semua nomor unik dalam seluruh periode (untuk hitung total %)
+    all_phones_with_label = set()
+    all_phones = set()
+    for (gk, gl), phones_data in contact_days.items():
+        for phone, d in phones_data.items():
+            all_phones.add(phone)
+            if d["labels"]:
+                all_phones_with_label.add(phone)
+    
+    total_unik_all = len(all_phones)
+    total_sudah_label_all = len(all_phones_with_label)
+    total_pct_all = round(total_sudah_label_all / total_unik_all * 100, 1) if total_unik_all > 0 else 0
+
+    return jsonify({
+        "rows": rows,
+        "label_cols": LABEL_COLS,
+        "total_unik_all": total_unik_all,
+        "total_sudah_label_all": total_sudah_label_all,
+        "total_pct_all": total_pct_all
+    })
 
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
