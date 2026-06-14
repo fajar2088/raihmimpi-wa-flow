@@ -944,7 +944,7 @@ def midtrans_callback():
                 break
         save_data(transaksi)
         if final_status == "lunas" and phone:
-        # AddToCart = transaksi masuk Midtrans (pending + lunas), pakai ctwa_clid
+        # AddToCart = transaksi masuk Midtrans (pending + lunas)
         if phone and final_status not in ("gagal",):
             try:
                 send_pixel_event("AddToCart", phone=phone, value=nominal, currency="IDR",
@@ -953,15 +953,7 @@ def midtrans_callback():
                                   ctwa_clid=get_ctwa_for_phone(phone))
             except Exception as atce:
                 logger.error("Pixel AddToCart midtrans gagal: " + str(atce))
-        # AddToCart = transaksi masuk Midtrans (pending + lunas), pakai ctwa_clid
-        if phone and final_status not in ("gagal",):
-            try:
-                send_pixel_event("AddToCart", phone=phone, value=nominal, currency="IDR",
-                                  event_id="atc_midtrans_" + str(order_id), content_name=kampanye,
-                                  content_ids=[kampanye_id] if kampanye_id else None,
-                                  ctwa_clid=get_ctwa_for_phone(phone))
-            except Exception as atce:
-                logger.error("Pixel AddToCart midtrans gagal: " + str(atce))
+        if final_status == "lunas" and phone:
             send_wa_message(phone, f"✅ *Donasi Berhasil!*\n\nAlhamdulillah donasi kakak sudah kami terima untuk,\n📋 *{kampanye}*\n💰 {format_rupiah(nominal)}\n🆔 {order_id}\n\nSemoga kakak beserta keluarga diberikan kesehatan selalu, segala urusannya selalu dilancarkan, dan apa yang telah di berikan membawa keberkahan untuk kakak beserta keluarga. Aamiin. 🤲\n_Raihmimpi.id_")
             notify_telegram(f"✅ <b>LUNAS!</b>\n👤 {donatur} ({phone})\n📋 {kampanye}\n💰 {format_rupiah(nominal)}\n🆔 {order_id}")
             send_pixel_event("Purchase", phone=phone, value=nominal, currency="IDR",
