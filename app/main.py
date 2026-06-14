@@ -2292,6 +2292,7 @@ def whatsapp_page():
     <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">WA Blast</div>
     <div class="settings-tab" data-tab="label-kontak" onclick="setSettingsTab(this)">Label Kontak</div>
     <div class="settings-tab" data-tab="shortcuts" onclick="setSettingsTab(this)">Shortcuts Pesan</div>
+    <div class="settings-tab" data-tab="wa-template" onclick="setSettingsTab(this)">Template Blast</div>
   </div>
 
   <div class="settings-section active" id="section-menu-utama">
@@ -2334,6 +2335,128 @@ def whatsapp_page():
 
       <button class="btn" onclick="sendBlast()">Kirim Blast</button>
       <span class="save-msg" id="blastSendMsg"></span>
+    </div>
+  </div>
+
+  <div class="settings-section" id="section-wa-template">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+          <h2 style="margin:0;">Template Blast</h2>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Template pesan untuk WA Blast. Perlu approval Meta (1-24 jam).</p>
+        </div>
+        <button class="btn" onclick="showTemplateForm()">+ Tambah Template</button>
+      </div>
+
+      <!-- Table -->
+      <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Nama Template</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Kategori</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Bahasa</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Status</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Isi</th>
+            <th style="padding:12px 16px;text-align:right;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="templateTableBody">
+          <tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal Form Template -->
+    <div id="templateFormModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 0;">
+      <div style="background:#fff;border-radius:16px;width:680px;max-width:95vw;margin:auto;">
+        <div style="background:#5b3df0;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-radius:16px 16px 0 0;">
+          <span style="color:#fff;font-weight:700;font-size:16px;">Broadcast Template</span>
+          <span onclick="closeTemplateForm()" style="color:#fff;cursor:pointer;font-size:22px;">✕</span>
+        </div>
+        <div style="display:flex;gap:0;">
+          <!-- Form -->
+          <div style="flex:1;padding:24px;border-right:1px solid #f3f4f6;">
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Kategori</label>
+              <select id="tmplCategory" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;" onchange="updateTemplatePreview()">
+                <option value="MARKETING">MARKETING</option>
+                <option value="UTILITY">UTILITY</option>
+                <option value="AUTHENTICATION">AUTHENTICATION</option>
+              </select>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Nama Template <span style="color:#dc2626;">*</span></label>
+              <input type="text" id="tmplName" placeholder="contoh: donasi_via_wa (huruf kecil, underscore)" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')">
+              <div style="font-size:11px;color:#9ca3af;margin-top:4px;"><span id="tmplNameCount">0</span>/60</div>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Format Judul</label>
+              <select id="tmplHeaderType" onchange="onHeaderTypeChange()" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+                <option value="">-- Pilih Tipe Judul --</option>
+                <option value="TEXT">TEXT</option>
+              </select>
+            </div>
+            <div id="tmplHeaderTextGroup" style="display:none;margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Teks Judul</label>
+              <input type="text" id="tmplHeaderText" placeholder="Judul template..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="updateTemplatePreview()">
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Isi <span style="color:#dc2626;">*</span></label>
+              <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                <button type="button" onclick="insertParam()" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;">+ Parameter</button>
+                <button type="button" onclick="wrapText('*')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;font-weight:700;">Bold</button>
+                <button type="button" onclick="wrapText('_')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;font-style:italic;">Italic</button>
+              </div>
+              <textarea id="tmplBody" rows="5" placeholder="Isi pesan template..." maxlength="1024" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;" oninput="updateTemplatePreview();document.getElementById('tmplBodyCount').textContent=this.value.length"></textarea>
+              <div style="font-size:11px;color:#9ca3af;margin-top:4px;"><span id="tmplBodyCount">0</span>/1024</div>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Catatan Kaki</label>
+              <textarea id="tmplFooter" rows="2" placeholder="Catatan kaki (opsional)..." maxlength="60" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;" oninput="updateTemplatePreview();document.getElementById('tmplFooterCount').textContent=this.value.length"></textarea>
+              <div style="font-size:11px;color:#9ca3af;margin-top:4px;"><span id="tmplFooterCount">0</span>/60</div>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Bahasa <span style="color:#dc2626;">*</span></label>
+              <select id="tmplLanguage" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+                <option value="">-- Pilih Bahasa --</option>
+                <option value="id">Indonesia (id)</option>
+                <option value="en_US">English US (en_US)</option>
+                <option value="en">English (en)</option>
+              </select>
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Tipe Tombol</label>
+              <select id="tmplBtnType" onchange="onBtnTypeChange()" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+                <option value="">Tidak Ada</option>
+                <option value="QUICK_REPLY">QUICK_REPLY</option>
+                <option value="CALL_TO_ACTION">CALL_TO_ACTION</option>
+              </select>
+            </div>
+            <div id="tmplBtnGroup" style="display:none;margin-bottom:16px;">
+              <div id="tmplBtnList"></div>
+              <button type="button" onclick="addTemplateButton()" style="margin-top:8px;padding:8px 14px;border:1px dashed #5b3df0;border-radius:8px;color:#5b3df0;background:#f5f3ff;cursor:pointer;font-size:13px;width:100%;">+ Tambah Tombol</button>
+            </div>
+            <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px;font-size:12px;color:#856404;margin-bottom:16px;">
+              ⚠️ Jumlah maksimal karakter body adalah 1024 karakter, sudah termasuk parameter yang anda input.
+            </div>
+          </div>
+          <!-- Preview -->
+          <div style="width:240px;padding:20px;background:#f9fafb;flex-shrink:0;">
+            <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:12px;">Pratinjau</div>
+            <div style="background:#e5ddd5;border-radius:12px;padding:12px;min-height:200px;">
+              <div id="tmplPreview" style="background:#fff;border-radius:8px;padding:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.1);">
+                <div id="tmplPreviewHeader" style="font-weight:700;margin-bottom:6px;display:none;"></div>
+                <div id="tmplPreviewBody" style="color:#333;"></div>
+                <div id="tmplPreviewFooter" style="color:#999;font-size:11px;margin-top:6px;display:none;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:16px 24px;border-top:1px solid #f3f4f6;display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="previewTemplate()" style="padding:10px 20px;background:#22c55e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">Pratinjau</button>
+          <button onclick="saveTemplateForm()" style="padding:10px 24px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">Simpan</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2484,11 +2607,205 @@ function setSettingsTab(el) {
   if (el.dataset.tab === "label-kontak") loadLabelsTable();
   if (el.dataset.tab === "wa-blast") loadBlastContacts();
   if (el.dataset.tab === "shortcuts") loadShortcutsTable();
+  if (el.dataset.tab === "wa-template") loadTemplateTable();
   document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".settings-section").forEach(s => s.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("section-" + el.dataset.tab).classList.add("active");
   if (el.dataset.tab === "wa-blast") loadBlastContacts();
+}
+
+// ---- Template Blast ----
+async function loadTemplateTable() {
+  const tbody = document.getElementById("templateTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#9ca3af;">Memuat dari Meta...</td></tr>';
+  try {
+    const res = await fetch("/api/wa-templates");
+    const json = await res.json();
+    const list = json.templates || [];
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Belum ada template. Klik "+ Tambah Template".</td></tr>';
+      return;
+    }
+    const statusColor = {APPROVED:"#16a34a",PENDING:"#d97706",REJECTED:"#dc2626",PAUSED:"#6b7280"};
+    tbody.innerHTML = list.map(t => {
+      const bodyComp = (t.components||[]).find(c => c.type === "BODY");
+      const bodyText = bodyComp ? (bodyComp.text||"").substring(0,80) : "-";
+      const sc = statusColor[t.status] || "#6b7280";
+      return `<tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 16px;font-size:14px;font-weight:600;">${t.name}</td>
+        <td style="padding:12px 16px;font-size:13px;">${t.category||"-"}</td>
+        <td style="padding:12px 16px;font-size:13px;">${t.language||"-"}</td>
+        <td style="padding:12px 16px;">
+          <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc}20;color:${sc};">${t.status}</span>
+        </td>
+        <td style="padding:12px 16px;font-size:13px;color:#6b7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${bodyText}</td>
+        <td style="padding:12px 16px;text-align:right;">
+          <button onclick="deleteTemplate('${t.id}','${t.name}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;padding:4px 8px;" title="Hapus">🗑</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;color:#dc2626;">Gagal memuat template.</td></tr>';
+  }
+}
+
+function showTemplateForm() {
+  document.getElementById("tmplCategory").value = "MARKETING";
+  document.getElementById("tmplName").value = "";
+  document.getElementById("tmplNameCount").textContent = "0";
+  document.getElementById("tmplHeaderType").value = "";
+  document.getElementById("tmplHeaderTextGroup").style.display = "none";
+  document.getElementById("tmplHeaderText").value = "";
+  document.getElementById("tmplBody").value = "";
+  document.getElementById("tmplBodyCount").textContent = "0";
+  document.getElementById("tmplFooter").value = "";
+  document.getElementById("tmplFooterCount").textContent = "0";
+  document.getElementById("tmplLanguage").value = "";
+  document.getElementById("tmplBtnType").value = "";
+  document.getElementById("tmplBtnGroup").style.display = "none";
+  document.getElementById("tmplBtnList").innerHTML = "";
+  updateTemplatePreview();
+  document.getElementById("templateFormModal").style.display = "flex";
+}
+
+function closeTemplateForm() {
+  document.getElementById("templateFormModal").style.display = "none";
+}
+
+function onHeaderTypeChange() {
+  const t = document.getElementById("tmplHeaderType").value;
+  document.getElementById("tmplHeaderTextGroup").style.display = t === "TEXT" ? "block" : "none";
+  updateTemplatePreview();
+}
+
+function onBtnTypeChange() {
+  const t = document.getElementById("tmplBtnType").value;
+  document.getElementById("tmplBtnGroup").style.display = t ? "block" : "none";
+  document.getElementById("tmplBtnList").innerHTML = "";
+  if (t) addTemplateButton();
+}
+
+let _btnCount = 0;
+function addTemplateButton() {
+  const btnType = document.getElementById("tmplBtnType").value;
+  const id = "btn_" + (++_btnCount);
+  const list = document.getElementById("tmplBtnList");
+  const div = document.createElement("div");
+  div.id = id;
+  div.style.cssText = "background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;";
+  if (btnType === "QUICK_REPLY") {
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:600;">Quick Reply</span>
+        <span onclick="document.getElementById('${id}').remove()" style="cursor:pointer;color:#dc2626;font-size:16px;">✕</span>
+      </div>
+      <input type="text" placeholder="Teks tombol..." data-btn-text style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+      <input type="hidden" data-btn-type value="QUICK_REPLY">
+    `;
+  } else {
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:600;">Call to Action</span>
+        <span onclick="document.getElementById('${id}').remove()" style="cursor:pointer;color:#dc2626;font-size:16px;">✕</span>
+      </div>
+      <select data-btn-subtype style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-bottom:6px;">
+        <option value="URL">URL</option>
+        <option value="PHONE_NUMBER">Phone Number</option>
+      </select>
+      <input type="text" placeholder="Teks tombol..." data-btn-text style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;">
+      <input type="text" placeholder="URL atau nomor telepon..." data-btn-value style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+      <input type="hidden" data-btn-type value="CALL_TO_ACTION">
+    `;
+  }
+  list.appendChild(div);
+}
+
+function insertParam() {
+  const ta = document.getElementById("tmplBody");
+  const existing = (ta.value.match(/\{\{(\d+)\}\}/g) || []);
+  const nextNum = existing.length + 1;
+  const pos = ta.selectionStart;
+  ta.value = ta.value.slice(0, pos) + "{{" + nextNum + "}}" + ta.value.slice(pos);
+  updateTemplatePreview();
+}
+
+function wrapText(marker) {
+  const ta = document.getElementById("tmplBody");
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const selected = ta.value.slice(start, end) || "teks";
+  ta.value = ta.value.slice(0, start) + marker + selected + marker + ta.value.slice(end);
+  updateTemplatePreview();
+}
+
+function updateTemplatePreview() {
+  const header = document.getElementById("tmplHeaderText").value;
+  const body = document.getElementById("tmplBody").value;
+  const footer = document.getElementById("tmplFooter").value;
+  const hEl = document.getElementById("tmplPreviewHeader");
+  const bEl = document.getElementById("tmplPreviewBody");
+  const fEl = document.getElementById("tmplPreviewFooter");
+  if (header) { hEl.textContent = header; hEl.style.display = "block"; } else { hEl.style.display = "none"; }
+  bEl.textContent = body || "";
+  if (footer) { fEl.textContent = footer; fEl.style.display = "block"; } else { fEl.style.display = "none"; }
+  document.getElementById("tmplNameCount").textContent = document.getElementById("tmplName").value.length;
+}
+
+function previewTemplate() {
+  updateTemplatePreview();
+  document.getElementById("tmplPreview").scrollIntoView({behavior:"smooth"});
+}
+
+async function saveTemplateForm() {
+  const name = document.getElementById("tmplName").value.trim();
+  const category = document.getElementById("tmplCategory").value;
+  const language = document.getElementById("tmplLanguage").value;
+  const body_text = document.getElementById("tmplBody").value.trim();
+  const header_type = document.getElementById("tmplHeaderType").value;
+  const header_text = document.getElementById("tmplHeaderText").value.trim();
+  const footer_text = document.getElementById("tmplFooter").value.trim();
+
+  if (!name || !body_text || !language) {
+    alert("Nama template, Isi, dan Bahasa wajib diisi");
+    return;
+  }
+
+  // Collect buttons
+  const buttons = [];
+  document.querySelectorAll("#tmplBtnList > div").forEach(div => {
+    const btnType = (div.querySelector("[data-btn-type]") || {}).value || "";
+    const btnText = (div.querySelector("[data-btn-text]") || {}).value || "";
+    const btnSubtype = (div.querySelector("[data-btn-subtype]") || {}).value || "URL";
+    const btnValue = (div.querySelector("[data-btn-value]") || {}).value || "";
+    if (btnText) buttons.push({type: btnType === "QUICK_REPLY" ? "QUICK_REPLY" : btnSubtype, text: btnText, value: btnValue});
+  });
+
+  const payload = {name, category, language, body_text, header_type, header_text, footer_text, buttons};
+
+  try {
+    const res = await fetch("/api/wa-templates", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.error) { alert("Error: " + json.error); return; }
+    closeTemplateForm();
+    alert("Template berhasil disubmit ke Meta. Status: PENDING (menunggu approval 1-24 jam).");
+    loadTemplateTable();
+  } catch(e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function deleteTemplate(id, name) {
+  if (!confirm("Hapus template '" + name + "'? Tindakan ini tidak bisa dibatalkan.")) return;
+  try {
+    const res = await fetch("/api/wa-templates/" + id + "?name=" + encodeURIComponent(name), {method:"DELETE"});
+    const json = await res.json();
+    loadTemplateTable();
+  } catch(e) { alert("Error: " + e.message); }
 }
 
 // ---- Shortcuts Pesan ----
@@ -3275,6 +3592,111 @@ def api_shortcuts_send(sc_id, phone):
         return jsonify({"status": "sent", "wa_status": resp.status_code})
     except Exception as e:
         logger.error(f"api_shortcuts_send error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+# ============================================================
+# TEMPLATE WA BLAST API
+# ============================================================
+
+@app.route("/api/wa-templates", methods=["GET"])
+def api_wa_templates_list():
+    """Fetch list template dari Meta API."""
+    try:
+        resp = requests.get(
+            f"https://graph.facebook.com/v22.0/{WABA_ID}/message_templates",
+            params={
+                "limit": 50,
+                "fields": "name,status,category,language,components,rejected_reason"
+            },
+            headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+            timeout=15
+        )
+        data = resp.json()
+        return jsonify({"status": resp.status_code, "templates": data.get("data", []), "raw": data})
+    except Exception as e:
+        logger.error(f"api_wa_templates_list error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/wa-templates", methods=["POST"])
+def api_wa_templates_create():
+    """Buat template baru dan submit ke Meta untuk approval."""
+    try:
+        body = request.get_json(silent=True) or {}
+        name = body.get("name", "").strip().lower().replace(" ", "_")
+        category = body.get("category", "MARKETING").upper()
+        language = body.get("language", "id")
+        body_text = body.get("body_text", "").strip()
+        header_type = body.get("header_type", "")
+        header_text = body.get("header_text", "").strip()
+        footer_text = body.get("footer_text", "").strip()
+        buttons = body.get("buttons", [])
+
+        if not name or not body_text:
+            return jsonify({"error": "name dan body_text wajib diisi"}), 400
+
+        components = []
+
+        # Header (optional)
+        if header_type == "TEXT" and header_text:
+            components.append({"type": "HEADER", "format": "TEXT", "text": header_text})
+
+        # Body (wajib)
+        components.append({"type": "BODY", "text": body_text})
+
+        # Footer (optional)
+        if footer_text:
+            components.append({"type": "FOOTER", "text": footer_text})
+
+        # Buttons (optional)
+        if buttons:
+            btn_components = []
+            for btn in buttons:
+                btn_type = btn.get("type", "QUICK_REPLY")
+                if btn_type == "QUICK_REPLY":
+                    btn_components.append({"type": "QUICK_REPLY", "text": btn.get("text", "")})
+                elif btn_type == "PHONE_NUMBER":
+                    btn_components.append({"type": "PHONE_NUMBER", "text": btn.get("text", ""), "phone_number": btn.get("value", "")})
+                elif btn_type == "URL":
+                    btn_components.append({"type": "URL", "text": btn.get("text", ""), "url": btn.get("value", "")})
+            if btn_components:
+                components.append({"type": "BUTTONS", "buttons": btn_components})
+
+        payload = {
+            "name": name,
+            "category": category,
+            "language": language,
+            "components": components
+        }
+
+        resp = requests.post(
+            f"https://graph.facebook.com/v22.0/{WABA_ID}/message_templates",
+            headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=15
+        )
+        logger.info(f"api_wa_templates_create: {resp.status_code} {resp.text[:300]}")
+        result = resp.json()
+        if resp.ok:
+            return jsonify({"status": "submitted", "id": result.get("id"), "name": name})
+        else:
+            return jsonify({"error": result.get("error", {}).get("message", "Unknown error"), "detail": result}), 400
+    except Exception as e:
+        logger.error(f"api_wa_templates_create error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/wa-templates/<template_id>", methods=["DELETE"])
+def api_wa_templates_delete(template_id):
+    """Hapus template dari Meta."""
+    try:
+        name = request.args.get("name", "")
+        resp = requests.delete(
+            f"https://graph.facebook.com/v22.0/{WABA_ID}/message_templates",
+            params={"name": name},
+            headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}"},
+            timeout=15
+        )
+        return jsonify({"status": resp.status_code, "result": resp.json()})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/test-templates", methods=["GET"])
