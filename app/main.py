@@ -1481,6 +1481,14 @@ def laporan_chat_harian():
       <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Ads</div>
       <div style="font-size:28px;font-weight:800;color:#f59e0b;" id="totalAds">-</div>
     </div>
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:160px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Contact</div>
+      <div style="font-size:28px;font-weight:800;color:#374151;" id="totalContact">-</div>
+    </div>
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:160px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Unik Contact</div>
+      <div style="font-size:28px;font-weight:800;color:#0891b2;" id="totalUnik">-</div>
+    </div>
   </div>
 
   <!-- Tabel -->
@@ -1519,6 +1527,8 @@ function loadLaporan() {{
     document.getElementById("totalUserInit").textContent = json.user_initiated || 0;
     document.getElementById("totalBizInit").textContent = json.business_initiated || 0;
     document.getElementById("totalAds").textContent = json.ads || 0;
+    document.getElementById("totalContact").textContent = json.total_contact || 0;
+    document.getElementById("totalUnik").textContent = json.total_unik || 0;
     if (!_laporanData.length) {{
       tbody.innerHTML = "<tr><td colspan=6 style='padding:40px;text-align:center;color:#9ca3af;'>Tidak ada data.</td></tr>";
       document.getElementById("laporanInfo").textContent = "";
@@ -1896,12 +1906,17 @@ def api_laporan_chat_harian():
     business_initiated = sum(1 for r in rows if r["type"] == "Business Initiated")
     ads = sum(1 for r in rows if r["type"] == "Ads")
     
+    total_contact = len(rows)
+    total_unik = len(set(r["phone"] for r in rows))
+
     return jsonify({
         "rows": rows,
-        "total": len(rows),
+        "total": total_contact,
         "user_initiated": user_initiated,
         "business_initiated": business_initiated,
-        "ads": ads
+        "ads": ads,
+        "total_contact": total_contact,
+        "total_unik": total_unik
     })
 
 @app.route("/api/blast/template-download", methods=["GET"])
