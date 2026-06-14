@@ -1342,6 +1342,9 @@ def login_required(f):
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("user_id"):
+            # API endpoints return JSON 401, page endpoints redirect
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Unauthorized", "redirect": "/login"}), 401
             return redirect("/login")
         return f(*args, **kwargs)
     return decorated
@@ -1854,10 +1857,18 @@ def api_laporan_chat_harian():
     
     rows = []
     for phone, contact in contacts.items():
+        # Pesan bisa di messages_db[phone] atau di contact["messages"]
         msgs = messages_db.get(phone, [])
         if not msgs:
-            # Coba ambil dari contact langsung
             msgs = contact.get("messages", [])
+        # Kalau masih kosong, buat 1 entry dari last_message
+        if not msgs and contact.get("last_message_at"):
+            msgs = [{
+                "direction": "in",
+                "text": contact.get("last_message", ""),
+                "timestamp": contact.get("last_message_at", ""),
+                "type": "text"
+            }]
         
         for msg in msgs:
             ts = msg.get("timestamp", "")
