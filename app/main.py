@@ -9,10 +9,12 @@ import requests
 from io import BytesIO
 from PIL import Image
 from datetime import datetime
-from flask import Flask, request, jsonify, Response, send_file
+from flask import Flask, request, jsonify, Response, send_file, session, redirect, url_for
 from pywa.utils import default_flow_request_decryptor, default_flow_response_encryptor
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.secret_key = os.environ.get("SECRET_KEY", "raihmimpi-secret-2024-xK9mP")
+import functools
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1302,6 +1304,395 @@ def api_blast():
         logger.error(f"api_blast error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+# ============================================================
+# USERS SYSTEM
+# ============================================================
+USERS_FILE = os.environ.get("DATA_DIR", "/tmp") + "/users.json"
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        # Buat admin default pertama kali
+        default = [{
+            "id": "user_1",
+            "email": "admin@raihmimpi.id",
+            "password": hash_password("admin123"),
+            "nama": "Administrator",
+            "role": "ADMINISTRATOR",
+            "status": "aktif",
+            "created_at": datetime.now().isoformat(),
+            "last_login": None
+        }]
+        save_users(default)
+        return default
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_users(data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def login_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect("/login")
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect("/login")
+        if session.get("user_role") != "ADMINISTRATOR":
+            return Response("Akses ditolak - hanya Administrator", status=403)
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if session.get("user_id"):
+        return redirect("/dashboard")
+    error = ""
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        users = load_users()
+        user = next((u for u in users if u["email"].lower() == email and u["status"] == "aktif"), None)
+        if user and user["password"] == hash_password(password):
+            session["user_id"] = user["id"]
+            session["user_email"] = user["email"]
+            session["user_nama"] = user["nama"]
+            session["user_role"] = user["role"]
+            # Update last login
+            users = load_users()
+            for u in users:
+                if u["id"] == user["id"]:
+                    u["last_login"] = datetime.now().isoformat()
+            save_users(users)
+            return redirect("/dashboard")
+        else:
+            error = "Email atau password salah, atau akun tidak aktif."
+    return Response(f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Masuk - Raihmimpi</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ min-height:100vh; background:#f0edff; display:flex; align-items:center; justify-content:center; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:20px; }}
+  .card {{ background:#fff; border-radius:24px; padding:40px 36px; width:100%; max-width:420px; box-shadow:0 4px 32px rgba(91,61,240,.12); }}
+  .logo {{ text-align:center; margin-bottom:28px; }}
+  .logo img {{ height:48px; object-fit:contain; }}
+  h2 {{ text-align:center; font-size:24px; font-weight:800; color:#1f2937; margin-bottom:28px; }}
+  .form-group {{ margin-bottom:16px; }}
+  label {{ display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }}
+  input[type=email], input[type=password], input[type=text] {{
+    width:100%; padding:12px 16px; border:1.5px solid #e5e7eb; border-radius:12px;
+    font-size:15px; outline:none; transition:border .2s; background:#f9fafb; color:#1f2937;
+  }}
+  input:focus {{ border-color:#5b3df0; background:#fff; }}
+  .password-wrap {{ position:relative; }}
+  .password-wrap input {{ padding-right:44px; }}
+  .eye-btn {{ position:absolute; right:14px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:#9ca3af; font-size:18px; }}
+  .error {{ background:#fef2f2; border:1px solid #fca5a5; color:#dc2626; padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px; }}
+  .remember {{ display:flex; align-items:center; gap:8px; font-size:13px; color:#6b7280; margin-bottom:20px; }}
+  .btn-login {{ width:100%; padding:14px; background:#5b3df0; color:#fff; border:none; border-radius:14px; font-size:16px; font-weight:700; cursor:pointer; transition:background .2s; }}
+  .btn-login:hover {{ background:#4c30d9; }}
+  .footer-links {{ text-align:center; margin-top:20px; font-size:13px; color:#9ca3af; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><img src="/static/IconRM.png" alt="Raihmimpi"></div>
+    <h2>Masuk</h2>
+    {'<div class="error">' + error + '</div>' if error else ''}
+    <form method="POST">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="email@raihmimpi.id" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="password-wrap">
+          <input type="password" name="password" id="pwdInput" placeholder="Password" required>
+          <button type="button" class="eye-btn" onclick="togglePwd()">👁</button>
+        </div>
+      </div>
+      <div class="remember">
+        <input type="checkbox" id="remember"> <label for="remember" style="margin:0;font-weight:400;">Ingatkan saya</label>
+      </div>
+      <button type="submit" class="btn-login">Masuk</button>
+    </form>
+    <div class="footer-links">Raihmimpi &copy; 2024</div>
+  </div>
+  <script>
+    function togglePwd() {{
+      const i = document.getElementById("pwdInput");
+      i.type = i.type === "password" ? "text" : "password";
+    }}
+  </script>
+</body>
+</html>""", mimetype="text/html")
+
+@app.route("/pengaturan/pengguna", methods=["GET"])
+@admin_required
+def pengguna_page():
+    user = {"nama": session.get("user_nama",""), "email": session.get("user_email",""), "role": session.get("user_role","")}
+    body = f"""
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+    <div>
+      <h2 style="margin:0;font-size:22px;font-weight:800;">Daftar Pengguna</h2>
+      <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Kelola akses pengguna sistem Raihmimpi</p>
+    </div>
+    <button onclick="showUserForm()" class="btn">+ Tambah Pengguna</button>
+  </div>
+
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Username (Email)</th>
+          <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Nama Lengkap</th>
+          <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Role</th>
+          <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Waktu Login Terakhir</th>
+          <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Status</th>
+          <th style="padding:12px 16px;text-align:right;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="usersTableBody">
+        <tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Memuat...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Form -->
+  <div id="userFormModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;width:480px;max-width:95vw;">
+      <div style="background:#5b3df0;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-radius:16px 16px 0 0;">
+        <span style="color:#fff;font-weight:700;font-size:16px;" id="userFormTitle">Tambah Pengguna</span>
+        <span onclick="closeUserForm()" style="color:#fff;cursor:pointer;font-size:22px;">✕</span>
+      </div>
+      <div style="padding:24px;">
+        <input type="hidden" id="uFormId">
+        <div class="form-group">
+          <label>Email <span style="color:#dc2626;">*</span></label>
+          <input type="email" id="uFormEmail" placeholder="email@raihmimpi.id" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div class="form-group">
+          <label>Nama Lengkap <span style="color:#dc2626;">*</span></label>
+          <input type="text" id="uFormNama" placeholder="Nama pengguna..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div class="form-group">
+          <label>Role <span style="color:#dc2626;">*</span></label>
+          <select id="uFormRole" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+            <option value="ADMINISTRATOR">ADMINISTRATOR</option>
+            <option value="TELEMARKETING">TELEMARKETING</option>
+            <option value="FINANCE">FINANCE</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label id="uFormPwdLabel">Password <span style="color:#dc2626;">*</span></label>
+          <input type="password" id="uFormPassword" placeholder="Password..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px;" id="uFormPwdHint"></div>
+        </div>
+        <div class="form-group" id="uFormStatusGroup" style="display:none;">
+          <label>Status</label>
+          <select id="uFormStatus" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+            <option value="aktif">Aktif</option>
+            <option value="nonaktif">Nonaktif</option>
+          </select>
+        </div>
+      </div>
+      <div style="padding:16px 24px;border-top:1px solid #f3f4f6;display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeUserForm()" style="padding:10px 20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-weight:600;">Batal</button>
+        <button onclick="saveUserForm()" style="padding:10px 24px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+loadUsersTable();
+
+async function loadUsersTable() {{
+  const tbody = document.getElementById("usersTableBody");
+  try {{
+    const res = await fetch("/api/users");
+    const json = await res.json();
+    const users = json.users || [];
+    const roleColor = {{ADMINISTRATOR:"#5b3df0", TELEMARKETING:"#0891b2", FINANCE:"#16a34a"}};
+    tbody.innerHTML = users.map(u => {{
+      const rc = roleColor[u.role] || "#6b7280";
+      const lastLogin = u.last_login ? u.last_login.replace("T"," ").substring(0,16) : "-";
+      const statusBg = u.status === "aktif" ? "#dcfce7" : "#f3f4f6";
+      const statusColor = u.status === "aktif" ? "#16a34a" : "#6b7280";
+      return `<tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 16px;font-size:13px;color:#5b3df0;">${{u.email}}</td>
+        <td style="padding:12px 16px;font-size:13px;font-weight:600;">${{u.nama}}</td>
+        <td style="padding:12px 16px;">
+          <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${{rc}}20;color:${{rc}};">${{u.role}}</span>
+        </td>
+        <td style="padding:12px 16px;font-size:12px;color:#6b7280;">${{lastLogin}}</td>
+        <td style="padding:12px 16px;">
+          <span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${{statusBg}};color:${{statusColor}};">${{u.status}}</span>
+        </td>
+        <td style="padding:12px 16px;text-align:right;display:flex;gap:6px;justify-content:flex-end;">
+          <button onclick="editUser('${{u.id}}','${{u.email}}','${{u.nama}}','${{u.role}}','${{u.status}}')"
+            style="padding:5px 12px;border:1px solid #5b3df0;color:#5b3df0;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;">Edit</button>
+          <button onclick="deleteUser('${{u.id}}','${{u.nama}}')"
+            style="padding:5px 12px;border:1px solid #dc2626;color:#dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;">Hapus</button>
+        </td>
+      </tr>`;
+    }}).join("");
+  }} catch(e) {{
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;color:#dc2626;">Gagal memuat.</td></tr>';
+  }}
+}}
+
+function showUserForm() {{
+  document.getElementById("userFormTitle").textContent = "Tambah Pengguna";
+  document.getElementById("uFormId").value = "";
+  document.getElementById("uFormEmail").value = "";
+  document.getElementById("uFormEmail").disabled = false;
+  document.getElementById("uFormNama").value = "";
+  document.getElementById("uFormRole").value = "TELEMARKETING";
+  document.getElementById("uFormPassword").value = "";
+  document.getElementById("uFormPwdHint").textContent = "";
+  document.getElementById("uFormStatusGroup").style.display = "none";
+  document.getElementById("userFormModal").style.display = "flex";
+}}
+
+function editUser(id, email, nama, role, status) {{
+  document.getElementById("userFormTitle").textContent = "Edit Pengguna";
+  document.getElementById("uFormId").value = id;
+  document.getElementById("uFormEmail").value = email;
+  document.getElementById("uFormEmail").disabled = true;
+  document.getElementById("uFormNama").value = nama;
+  document.getElementById("uFormRole").value = role;
+  document.getElementById("uFormPassword").value = "";
+  document.getElementById("uFormPwdHint").textContent = "Kosongkan jika tidak ingin ganti password";
+  document.getElementById("uFormStatus").value = status;
+  document.getElementById("uFormStatusGroup").style.display = "block";
+  document.getElementById("userFormModal").style.display = "flex";
+}}
+
+function closeUserForm() {{
+  document.getElementById("userFormModal").style.display = "none";
+}}
+
+async function saveUserForm() {{
+  const id = document.getElementById("uFormId").value;
+  const email = document.getElementById("uFormEmail").value.trim();
+  const nama = document.getElementById("uFormNama").value.trim();
+  const role = document.getElementById("uFormRole").value;
+  const password = document.getElementById("uFormPassword").value;
+  const status = document.getElementById("uFormStatus").value || "aktif";
+
+  if (!nama) {{ alert("Nama wajib diisi"); return; }}
+
+  if (id) {{
+    // Edit
+    const body = {{nama, role, status}};
+    if (password) body.password = password;
+    const res = await fetch("/api/users/" + id, {{method:"PUT", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify(body)}});
+    const json = await res.json();
+    if (json.error) {{ alert("Error: " + json.error); return; }}
+  }} else {{
+    // Create
+    if (!email || !password) {{ alert("Email dan password wajib diisi"); return; }}
+    const res = await fetch("/api/users", {{method:"POST", headers:{{"Content-Type":"application/json"}}, body:JSON.stringify({{email, nama, role, password}})}});
+    const json = await res.json();
+    if (json.error) {{ alert("Error: " + json.error); return; }}
+  }}
+  closeUserForm();
+  loadUsersTable();
+}}
+
+async function deleteUser(id, nama) {{
+  if (!confirm("Hapus pengguna '" + nama + "'?")) return;
+  const res = await fetch("/api/users/" + id, {{method:"DELETE"}});
+  const json = await res.json();
+  if (json.error) {{ alert("Error: " + json.error); return; }}
+  loadUsersTable();
+}}
+</script>
+"""
+    return Response(render_page("pengaturan", "Daftar Pengguna", "", body), mimetype="text/html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+# ---- User Management API ----
+@app.route("/api/users", methods=["GET"])
+def api_users_list():
+    if not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+    users = load_users()
+    # Jangan return password
+    safe = [{k:v for k,v in u.items() if k != "password"} for u in users]
+    return jsonify({"users": safe})
+
+@app.route("/api/users", methods=["POST"])
+def api_users_create():
+    if session.get("user_role") != "ADMINISTRATOR":
+        return jsonify({"error": "Akses ditolak"}), 403
+    body = request.get_json(silent=True) or {}
+    email = body.get("email", "").strip().lower()
+    nama = body.get("nama", "").strip()
+    role = body.get("role", "TELEMARKETING").upper()
+    password = body.get("password", "")
+    if not email or not nama or not password:
+        return jsonify({"error": "email, nama, password wajib diisi"}), 400
+    users = load_users()
+    if any(u["email"].lower() == email for u in users):
+        return jsonify({"error": "Email sudah terdaftar"}), 400
+    new_user = {
+        "id": f"user_{int(datetime.now().timestamp()*1000)}",
+        "email": email, "password": hash_password(password),
+        "nama": nama, "role": role, "status": "aktif",
+        "created_at": datetime.now().isoformat(), "last_login": None
+    }
+    users.append(new_user)
+    save_users(users)
+    return jsonify({"status": "created", "user": {k:v for k,v in new_user.items() if k != "password"}})
+
+@app.route("/api/users/<user_id>", methods=["PUT"])
+def api_users_update(user_id):
+    if session.get("user_role") != "ADMINISTRATOR":
+        return jsonify({"error": "Akses ditolak"}), 403
+    body = request.get_json(silent=True) or {}
+    users = load_users()
+    for u in users:
+        if u["id"] == user_id:
+            if "nama" in body: u["nama"] = body["nama"]
+            if "role" in body: u["role"] = body["role"].upper()
+            if "status" in body: u["status"] = body["status"]
+            if "password" in body and body["password"]:
+                u["password"] = hash_password(body["password"])
+            save_users(users)
+            return jsonify({"status": "updated"})
+    return jsonify({"error": "User tidak ditemukan"}), 404
+
+@app.route("/api/users/<user_id>", methods=["DELETE"])
+def api_users_delete(user_id):
+    if session.get("user_role") != "ADMINISTRATOR":
+        return jsonify({"error": "Akses ditolak"}), 403
+    if user_id == session.get("user_id"):
+        return jsonify({"error": "Tidak bisa hapus akun sendiri"}), 400
+    users = load_users()
+    users = [u for u in users if u["id"] != user_id]
+    save_users(users)
+    return jsonify({"status": "deleted"})
+
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
     """Download template Excel untuk upload nomor blast."""
@@ -1596,6 +1987,11 @@ def render_sidebar(active):
     )
     return f"""<div class="sidebar">
   <div class="logo" style="padding:12px 16px;"><img src="/static/IconRM.png" style="height:36px;object-fit:contain;"></div>
+  <div style="padding:8px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:4px;">
+    <div style="font-size:12px;color:rgba(255,255,255,.7);">Masuk sebagai</div>
+    <div style="font-size:13px;font-weight:700;color:#fff;">{session.get('user_nama','')}</div>
+    <div style="font-size:11px;color:rgba(255,255,255,.5);">{session.get('user_role','')}</div>
+  </div>
   {links}
 </div>"""
 
@@ -1620,6 +2016,7 @@ def render_page(active, title, subtitle, body_html, extra_head=""):
 </html>"""
 
 @app.route("/dashboard", methods=["GET"])
+@login_required
 def dashboard():
     """Dashboard donasi sederhana."""
     body = """
@@ -1704,6 +2101,7 @@ setInterval(loadData, 30000);
 
 
 @app.route("/pesanan", methods=["GET"])
+@login_required
 def pesanan():
     """Daftar pesanan donasi dengan filter."""
     body = """
@@ -1824,6 +2222,7 @@ setInterval(loadData, 30000);
 
 
 @app.route("/pesanan/<order_id>", methods=["GET"])
+@login_required
 def pesanan_detail(order_id):
     """Detail satu pesanan donasi."""
     transaksi = load_data()
@@ -1876,6 +2275,7 @@ def pesanan_detail(order_id):
 
 
 @app.route("/chat", methods=["GET"])
+@login_required
 def chat_page():
     """Halaman Inbox/Chat - list kontak (kiri) + panel percakapan (kanan)."""
     body = """
@@ -2786,6 +3186,7 @@ setInterval(() => {
 
 
 @app.route("/whatsapp", methods=["GET"])
+@login_required
 def whatsapp_page():
     """Halaman Pengaturan: Menu Utama (auto-reply) dan WA Blast - sistem Raihmimpi sendiri."""
     body = """
@@ -4390,6 +4791,7 @@ def api_settings_kampanye_aktif():
     return jsonify({"status": "ok", "kampanye_aktif": settings["kampanye_aktif"]})
 
 @app.route("/kampanye", methods=["GET"])
+@login_required
 def kampanye_page():
     """Halaman kelola kampanye yang ditampilkan di Flow donasi."""
     body = """
