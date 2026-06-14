@@ -1572,6 +1572,7 @@ def laporan_tracking_campaign():
             <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">No. Handphone</th>
             <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">First Interaction Message</th>
             <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Tanggal Interaction</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Event</th>
           </tr>
         </thead>
         <tbody id="trackingDetailBody"></tbody>
