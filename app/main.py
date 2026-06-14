@@ -831,14 +831,14 @@ def wa_flow_endpoint():
                                             logger.error(f"Pixel Lead event gagal: {pe}")
 
                             # Handle klik tombol Menu Utama
-                            if button_reply_id == "btn_donasi":
+                            if button_reply_id and (button_reply_id == "btn_donasi" or button_reply_id.startswith("btn_donasi")):
                                 try:
                                     send_wa_flow_message(phone)
                                     logger.info(f"Flow donasi dikirim ke {phone} (klik tombol Mulai Donasi)")
                                 except Exception as fe:
                                     logger.error(f"Gagal kirim Flow ke {phone}: {fe}", exc_info=True)
                                 continue
-                            elif button_reply_id == "btn_admin":
+                            elif button_reply_id and (button_reply_id == "btn_admin" or button_reply_id.startswith("btn_admin")):
                                 try:
                                     send_wa_message(phone, "Admin akan segera membalas pesan Anda. Mohon tunggu sebentar 🙏")
                                     inbox = load_inbox()
