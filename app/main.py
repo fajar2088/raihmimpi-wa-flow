@@ -1296,7 +1296,7 @@ LAYOUT_CSS = """
   .detail-row .val { font-weight:600; text-align:right; }
 
   /* Chat / Inbox */
-  .chat-wrap { display:flex; height:calc(100vh - 80px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .chat-wrap { display:flex; height:calc(100vh - 120px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
   .chat-tabs { display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee; }
   .chat-tab { flex:1; text-align:center; padding:8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#f3f4f8; color:#6b7280; }
