@@ -2938,17 +2938,21 @@ def api_laporan_tracking_campaign():
                 })
 
     # Hitung Add to Cart dan Purchase dari transaksi
+    # Hanya kontak dengan ctwa_clid valid (dari iklan Meta)
     for t in transaksi_all:
         phone = t.get("phone", "")
         status = t.get("status", "")
-        # Cek apakah phone ini ada di campaign
-        for cname, cdata in campaigns.items():
         contact_c = contacts.get(phone, {})
         ctwa_c = contact_c.get("ctwa_clid", "") or ""
         is_valid_c = ctwa_c and len(ctwa_c) >= 20 and not ctwa_c.startswith("clid_test") and not ctwa_c.startswith("test_")
         if not is_valid_c:
             continue
+        for cname, cdata in campaigns.items():
+            if phone in cdata["phones"]:
+                cdata["add_to_cart"].add(phone)
+                if status == "lunas":
                     cdata["purchase"].add(phone)
+
 
     # Build result
     result = []
