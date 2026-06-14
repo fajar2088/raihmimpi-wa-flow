@@ -1537,7 +1537,7 @@ function loadSummary() {{
       var pct = r.pct_label + "%";
       var pctColor = r.pct_label >= 70 ? "#16a34a" : r.pct_label >= 40 ? "#d97706" : "#dc2626";
       html += "<tr style='border-bottom:1px solid #f3f4f6;'>";
-      html += "<td style='padding:12px 16px;font-size:13px;font-weight:600;'>" + r.group_label + "</td>";
+      html += "<td style='padding:8px 12px;font-size:12px;font-weight:600;white-space:nowrap;'>" + r.group_label + "</td>";
       html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + r.jumlah_contact + "</td>";
       html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + r.jumlah_unik + "</td>";
       html += "<td style='padding:12px 16px;font-size:13px;text-align:center;font-weight:700;color:" + pctColor + ";'>" + pct + "</td>";
