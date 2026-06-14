@@ -2139,7 +2139,7 @@ def api_laporan_summary():
             except Exception:
                 continue
 
-            day_key = (group_key, group_label, phone)
+            day_key = (group_key, group_label, phone, date_part)
             if day_key not in days_seen:
                 days_seen.add(day_key)
                 if (group_key, group_label) not in contact_days:
@@ -2147,33 +2147,28 @@ def api_laporan_summary():
                 if phone not in contact_days[(group_key, group_label)]:
                     contact_days[(group_key, group_label)][phone] = {
                         "labels": contact.get("labels", []),
-                        "has_any": False
+                        "day_count": 0
                     }
-                contact_days[(group_key, group_label)][phone]["has_any"] = True
-
-    # Tentukan hari pertama setiap kontak muncul dalam periode
-    # phone -> group_key pertama kali muncul
-    phone_first_group = {}
-    for (group_key, group_label), phones_data in sorted(contact_days.items(), key=lambda x: x[0][0]):
-        for phone in phones_data:
-            if phone not in phone_first_group:
-                phone_first_group[phone] = group_key
+                contact_days[(group_key, group_label)][phone]["day_count"] += 1
 
     # Build rows
     rows = []
     for (group_key, group_label), phones_data in contact_days.items():
-        # Jumlah Contact = semua nomor yang aktif di hari ini
-        jumlah_contact = len(phones_data)
-        # Jumlah Unik Contact = nomor yang PERTAMA KALI muncul di group ini
-        unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
-        jumlah_unik = len(unik_phones)
-        sudah_label = sum(1 for p in unik_phones if phones_data[p]["labels"])
+        # Jumlah Contact = total kontak-hari (tiap nomor bisa dihitung lebih dari 1x jika aktif di beberapa hari)
+        # phones_data[phone]["day_count"] = berapa hari nomor ini aktif dalam group ini
+        jumlah_contact = sum(d.get("day_count", 1) for d in phones_data.values())
+        
+        # Jumlah Unik Contact = nomor unik dalam group ini (tidak peduli berapa hari aktif)
+        jumlah_unik = len(phones_data)
+        
+        # % sudah label = dari nomor unik yang sudah punya label
+        sudah_label = sum(1 for d in phones_data.values() if d["labels"])
         pct_label = round(sudah_label / jumlah_unik * 100, 1) if jumlah_unik > 0 else 0
 
         label_counts = {}
         for col in LABEL_COLS:
-            label_counts[col] = sum(1 for p in unik_phones
-                                   if col in phones_data[p]["labels"])
+            label_counts[col] = sum(1 for d in phones_data.values()
+                                   if col in d["labels"])
 
         rows.append({
             "group_key": group_key,
