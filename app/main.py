@@ -797,6 +797,50 @@ def wa_flow_endpoint():
 
                             record_incoming_message(phone, text, msg_type="text" if msg_type == "text" else msg_type, name=contact_name)
 
+                            # Auto-label dari pesan yang mengandung [nama_label]
+                            if msg_type == "text" and text:
+                                import re as _re
+                                bracket_labels = _re.findall(r'\[([^\[\]]+)\]', text)
+                                if bracket_labels:
+                                    try:
+                                        labels_cfg = load_labels()
+                                        existing_label_names = [l["name"].lower() for l in labels_cfg]
+                                        inbox_al = load_inbox()
+                                        contact_al = inbox_al.get("contacts", {}).get(phone, {})
+                                        contact_labels = contact_al.get("labels", [])
+                                        changed = False
+                                        for bl in bracket_labels:
+                                            bl = bl.strip()
+                                            if not bl:
+                                                continue
+                                            # Buat label baru jika belum ada
+                                            if bl.lower() not in existing_label_names:
+                                                import uuid as _uuid
+                                                new_label = {
+                                                    "id": str(_uuid.uuid4()),
+                                                    "name": bl,
+                                                    "category": "Meta Ads",
+                                                    "bg_color": "#e0d9ff",
+                                                    "text_color": "#5b3df0"
+                                                }
+                                                labels_cfg.append(new_label)
+                                                settings_al = load_settings()
+                                                settings_al["labels"] = labels_cfg
+                                                save_settings(settings_al)
+                                                existing_label_names.append(bl.lower())
+                                                logger.info(f"Auto-created label [{bl}] kategori Meta Ads")
+                                            # Assign ke kontak jika belum ada
+                                            if bl not in contact_labels:
+                                                contact_labels.append(bl)
+                                                changed = True
+                                        if changed:
+                                            contact_al["labels"] = contact_labels
+                                            inbox_al["contacts"][phone] = contact_al
+                                            save_inbox(inbox_al)
+                                            logger.info(f"Auto-label {bracket_labels} assigned ke {phone}")
+                                    except Exception as ale:
+                                        logger.error(f"Auto-label error: {ale}", exc_info=True)
+
                             # Simpan metadata CTWA + nama jika ada
                             if referral or contact_name:
                                 inbox = load_inbox()
