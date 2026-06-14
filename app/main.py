@@ -2108,7 +2108,18 @@ def api_laporan_summary():
             ts = msg.get("timestamp", "")
             if not ts:
                 continue
-            date_part = ts[:10]
+            # Konversi UTC ke WIB (UTC+7)
+            try:
+                from datetime import datetime as dt2, timedelta
+                if "T" in ts:
+                    dt_utc = dt2.fromisoformat(ts[:19])
+                else:
+                    dt_utc = dt2.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+                dt_wib = dt_utc + timedelta(hours=7)
+                date_part = dt_wib.strftime("%Y-%m-%d")
+            except Exception:
+                date_part = ts[:10]
+
             if date_from and date_part < date_from:
                 continue
             if date_to and date_part > date_to:
@@ -2122,7 +2133,6 @@ def api_laporan_summary():
                     group_key = d.strftime("%Y-%m")
                     group_label = d.strftime("%B")
                 else:
-                    # Day of week
                     days_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
                     group_key = str(d.weekday())
                     group_label = days_id[d.weekday()]
@@ -2137,25 +2147,22 @@ def api_laporan_summary():
                 if phone not in contact_days[(group_key, group_label)]:
                     contact_days[(group_key, group_label)][phone] = {
                         "labels": contact.get("labels", []),
-                        "msg_count": 0,
-                        "has_incoming": False
+                        "has_any": False
                     }
-                contact_days[(group_key, group_label)][phone]["msg_count"] += 1
-                if msg.get("direction", "in") == "in":
-                    contact_days[(group_key, group_label)][phone]["has_incoming"] = True
+                contact_days[(group_key, group_label)][phone]["has_any"] = True
 
-    # Build rows
+    # Build rows - definisi sama dengan chat harian: semua kontak yang punya pesan
     rows = []
     for (group_key, group_label), phones_data in contact_days.items():
-        jumlah_contact = sum(1 for p, d in phones_data.items() if d["has_incoming"])
-        jumlah_unik = len(set(p for p, d in phones_data.items() if d["has_incoming"]))
-        sudah_label = sum(1 for p, d in phones_data.items() if d["has_incoming"] and d["labels"])
+        jumlah_contact = len(phones_data)
+        jumlah_unik = len(set(phones_data.keys()))
+        sudah_label = sum(1 for p, d in phones_data.items() if d["labels"])
         pct_label = round(sudah_label / jumlah_unik * 100, 1) if jumlah_unik > 0 else 0
 
         label_counts = {}
         for col in LABEL_COLS:
             label_counts[col] = sum(1 for p, d in phones_data.items()
-                                   if d["has_incoming"] and col in d["labels"])
+                                   if col in d["labels"])
 
         rows.append({
             "group_key": group_key,
