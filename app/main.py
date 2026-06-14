@@ -2151,18 +2151,29 @@ def api_laporan_summary():
                     }
                 contact_days[(group_key, group_label)][phone]["has_any"] = True
 
-    # Build rows - definisi sama dengan chat harian: semua kontak yang punya pesan
+    # Tentukan hari pertama setiap kontak muncul dalam periode
+    # phone -> group_key pertama kali muncul
+    phone_first_group = {}
+    for (group_key, group_label), phones_data in sorted(contact_days.items(), key=lambda x: x[0][0]):
+        for phone in phones_data:
+            if phone not in phone_first_group:
+                phone_first_group[phone] = group_key
+
+    # Build rows
     rows = []
     for (group_key, group_label), phones_data in contact_days.items():
+        # Jumlah Contact = semua nomor yang aktif di hari ini
         jumlah_contact = len(phones_data)
-        jumlah_unik = len(set(phones_data.keys()))
-        sudah_label = sum(1 for p, d in phones_data.items() if d["labels"])
+        # Jumlah Unik Contact = nomor yang PERTAMA KALI muncul di group ini
+        unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
+        jumlah_unik = len(unik_phones)
+        sudah_label = sum(1 for p in unik_phones if phones_data[p]["labels"])
         pct_label = round(sudah_label / jumlah_unik * 100, 1) if jumlah_unik > 0 else 0
 
         label_counts = {}
         for col in LABEL_COLS:
-            label_counts[col] = sum(1 for p, d in phones_data.items()
-                                   if col in d["labels"])
+            label_counts[col] = sum(1 for p in unik_phones
+                                   if col in phones_data[p]["labels"])
 
         rows.append({
             "group_key": group_key,
