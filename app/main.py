@@ -24,6 +24,7 @@ WA_PHONE_NUMBER_ID = os.environ.get("WA_PHONE_NUMBER_ID", "")
 WA_ACCESS_TOKEN = os.environ.get("WA_ACCESS_TOKEN", "")
 WA_TOKEN = WA_ACCESS_TOKEN  # alias untuk kompatibilitas
 WABA_ID = os.environ.get("WABA_ID", "855788613793352")
+WEBHOOK_VERIFY_TOKEN = os.environ.get("WEBHOOK_VERIFY_TOKEN", "raihmimpi2024")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 FLOW_PRIVATE_KEY_PEM = os.environ.get("FLOW_PRIVATE_KEY", "")
