@@ -1469,13 +1469,17 @@ def laporan_chat_harian():
 
   <!-- Summary -->
   <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
-    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:180px;">
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:160px;">
       <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total User Initiated</div>
       <div style="font-size:28px;font-weight:800;color:#5b3df0;" id="totalUserInit">-</div>
     </div>
-    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:180px;">
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:160px;">
       <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Business Initiated</div>
       <div style="font-size:28px;font-weight:800;color:#16a34a;" id="totalBizInit">-</div>
+    </div>
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:160px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Ads</div>
+      <div style="font-size:28px;font-weight:800;color:#f59e0b;" id="totalAds">-</div>
     </div>
   </div>
 
@@ -1514,6 +1518,7 @@ function loadLaporan() {{
     _laporanData = json.rows || [];
     document.getElementById("totalUserInit").textContent = json.user_initiated || 0;
     document.getElementById("totalBizInit").textContent = json.business_initiated || 0;
+    document.getElementById("totalAds").textContent = json.ads || 0;
     if (!_laporanData.length) {{
       tbody.innerHTML = "<tr><td colspan=6 style='padding:40px;text-align:center;color:#9ca3af;'>Tidak ada data.</td></tr>";
       document.getElementById("laporanInfo").textContent = "";
@@ -1527,7 +1532,7 @@ function loadLaporan() {{
     var html = "";
     for (var j=0;j<unique.length;j++) {{
       var r=unique[j];
-      var tc=r.type==="User Initiated"?"#2563eb":"#16a34a";
+      var tc=r.type==="User Initiated"?"#2563eb":r.type==="Ads"?"#f59e0b":"#16a34a";
       var la=(r.labels||[]).map(function(l){{return "<span style='padding:2px 8px;border-radius:10px;font-size:11px;background:#e0d9ff;color:#5b3df0;'>"+l+"</span>";}}).join("")||"-";
       html+="<tr style='border-bottom:1px solid #f3f4f6;'>";
       html+="<td style='padding:12px 16px;font-size:13px;white-space:nowrap;'>"+r.chat_date+"</td>";
@@ -1820,7 +1825,7 @@ def api_users_delete(user_id):
 @app.route("/api/laporan/chat-harian", methods=["GET"])
 @login_required
 def api_laporan_chat_harian():
-    """API laporan chat harian - semua percakapan dalam rentang tanggal."""
+    """API laporan chat harian - 1 baris per kontak per hari."""
     date_from = request.args.get("from", "")
     date_to = request.args.get("to", "")
     
@@ -1830,11 +1835,9 @@ def api_laporan_chat_harian():
     
     rows = []
     for phone, contact in contacts.items():
-        # Pesan bisa di messages_db[phone] atau di contact["messages"]
         msgs = messages_db.get(phone, [])
         if not msgs:
             msgs = contact.get("messages", [])
-        # Kalau masih kosong, buat 1 entry dari last_message
         if not msgs and contact.get("last_message_at"):
             msgs = [{
                 "direction": "in",
@@ -1843,6 +1846,8 @@ def api_laporan_chat_harian():
                 "type": "text"
             }]
         
+        # Group pesan per hari
+        days = {}
         for msg in msgs:
             ts = msg.get("timestamp", "")
             if not ts:
@@ -1852,34 +1857,50 @@ def api_laporan_chat_harian():
                 continue
             if date_to and date_part > date_to:
                 continue
+            if date_part not in days:
+                days[date_part] = []
+            days[date_part].append(msg)
+        
+        # 1 baris per kontak per hari
+        is_ads = bool(contact.get("ctwa_clid") or contact.get("ad_headline"))
+        
+        for date_part, day_msgs in days.items():
+            # Tentukan tipe berdasarkan pesan PERTAMA di hari itu
+            first_msg = min(day_msgs, key=lambda m: m.get("timestamp", ""))
+            first_direction = first_msg.get("direction", "in")
             
-            direction = msg.get("direction", "in")
-            msg_type = "User Initiated" if direction == "in" else "Business Initiated"
+            if is_ads:
+                msg_type = "Ads"
+            elif first_direction == "in":
+                msg_type = "User Initiated"
+            else:
+                msg_type = "Business Initiated"
             
             rows.append({
                 "chat_date": date_part,
-                "chat_datetime": ts[:16].replace("T", " "),
+                "chat_datetime": date_part,
                 "nama_user": session.get("user_nama", "-"),
                 "nama": contact.get("name", phone),
                 "phone": phone,
                 "type": msg_type,
                 "labels": contact.get("labels", []),
-                "text": msg.get("text", "")[:100],
-                "direction": direction
+                "direction": first_direction
             })
     
-    # Sort by datetime desc
-    rows.sort(key=lambda x: x["chat_datetime"], reverse=True)
+    # Sort by date desc
+    rows.sort(key=lambda x: x["chat_date"], reverse=True)
     
-    # Hitung summary
-    user_initiated = sum(1 for r in rows if r["direction"] == "in")
-    business_initiated = sum(1 for r in rows if r["direction"] == "out")
+    # Hitung summary per kontak unik per hari
+    user_initiated = sum(1 for r in rows if r["type"] == "User Initiated")
+    business_initiated = sum(1 for r in rows if r["type"] == "Business Initiated")
+    ads = sum(1 for r in rows if r["type"] == "Ads")
     
     return jsonify({
         "rows": rows,
         "total": len(rows),
         "user_initiated": user_initiated,
-        "business_initiated": business_initiated
+        "business_initiated": business_initiated,
+        "ads": ads
     })
 
 @app.route("/api/blast/template-download", methods=["GET"])
