@@ -2151,24 +2151,33 @@ def api_laporan_summary():
                     }
                 contact_days[(group_key, group_label)][phone]["day_count"] += 1
 
+    # Untuk Day: phone_first_group = group_key pertama kali nomor muncul
+    phone_first_group = {}
+    for (gk, gl), phones_data in sorted(contact_days.items(), key=lambda x: x[0][0]):
+        for phone in phones_data:
+            if phone not in phone_first_group:
+                phone_first_group[phone] = gk
+
     # Build rows
     rows = []
     for (group_key, group_label), phones_data in contact_days.items():
-        # Jumlah Contact = total kontak-hari (tiap nomor bisa dihitung lebih dari 1x jika aktif di beberapa hari)
-        # phones_data[phone]["day_count"] = berapa hari nomor ini aktif dalam group ini
+        # Jumlah Contact = total baris (tiap nomor × hari aktif dalam group)
         jumlah_contact = sum(d.get("day_count", 1) for d in phones_data.values())
-        
-        # Jumlah Unik Contact = nomor unik dalam group ini (tidak peduli berapa hari aktif)
-        jumlah_unik = len(phones_data)
-        
-        # % sudah label = dari nomor unik yang sudah punya label
-        sudah_label = sum(1 for d in phones_data.values() if d["labels"])
+
+        if group_by == "day":
+            # Day: unik = nomor yang PERTAMA KALI muncul di hari ini
+            unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
+        else:
+            # Month: unik = semua nomor yang aktif di bulan ini
+            unik_phones = list(phones_data.keys())
+
+        jumlah_unik = len(unik_phones)
+        sudah_label = sum(1 for p in unik_phones if phones_data[p]["labels"])
         pct_label = round(sudah_label / jumlah_unik * 100, 1) if jumlah_unik > 0 else 0
 
         label_counts = {}
         for col in LABEL_COLS:
-            label_counts[col] = sum(1 for d in phones_data.values()
-                                   if col in d["labels"])
+            label_counts[col] = sum(1 for p in unik_phones if col in phones_data[p]["labels"])
 
         rows.append({
             "group_key": group_key,
