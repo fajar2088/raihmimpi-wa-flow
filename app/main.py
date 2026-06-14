@@ -2937,15 +2937,25 @@ def api_laporan_tracking_campaign():
                     campaigns[bl]["leads"].add(phone)
                 if not campaigns[bl]["ad_id"] and ad_id:
                     campaigns[bl]["ad_id"] = ad_id
+                has_vc = bool(contact.get("view_content_at"))
+                if is_valid_ctwa and has_vc:
+                    init_event = "View Content"
+                    campaigns[bl]["view_content"].add(phone)
+                elif is_valid_ctwa:
+                    init_event = "Lead Submitted"
+                else:
+                    init_event = "Contact"
+                if not campaigns[bl]["ad_id"] and ad_id:
+                    campaigns[bl]["ad_id"] = ad_id
                 campaigns[bl]["contacts_detail"].append({
                     "nama": contact.get("name", phone),
                     "phone": phone,
                     "first_msg": first_msg_text[:50] if first_msg_text else "",
                     "first_date": first_msg_date or "",
                     "ad_id": ad_id,
-                    "ctwa_clid": ctwa_clid[:20] if ctwa_clid else ""
+                    "ctwa_clid": ctwa_clid[:20] if ctwa_clid else "",
+                    "event": init_event
                 })
-
     # Hitung Add to Cart dan Purchase dari transaksi
     # Hanya kontak dengan ctwa_clid valid (dari iklan Meta)
     for t in transaksi_all:
