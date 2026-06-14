@@ -1473,11 +1473,21 @@ def laporan_summary():
       </div>
       <button onclick="loadSummary()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
       <button onclick="exportSummary()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+      <div style="display:flex;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;">
+        <button id="btnTabel" onclick="setView('tabel')" style="padding:8px 16px;border:none;background:#5b3df0;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">📋 Tabel</button>
+        <button id="btnGrafik" onclick="setView('grafik')" style="padding:8px 16px;border:none;background:#fff;color:#6b7280;font-size:13px;font-weight:600;cursor:pointer;">📈 Grafik</button>
+      </div>
     </div>
   </div>
 
+  <!-- Grafik -->
+  <div id="grafikView" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#374151;">Tren Jumlah Contact</div>
+    <canvas id="summaryChart" style="max-height:350px;"></canvas>
+  </div>
+
   <!-- Tabel -->
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <div id="tabelView" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;min-width:1000px;" id="summaryTable">
         <thead id="summaryHead">
@@ -1504,9 +1514,71 @@ def laporan_summary():
       </table>
     </div>
   </div>
+  </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 var _summaryData = [];
+var _summaryChart = null;
+var _currentView = "tabel";
+
+function setView(view) {{
+  _currentView = view;
+  document.getElementById("tabelView").style.display = view === "tabel" ? "block" : "none";
+  document.getElementById("grafikView").style.display = view === "grafik" ? "block" : "none";
+  document.getElementById("btnTabel").style.background = view === "tabel" ? "#5b3df0" : "#fff";
+  document.getElementById("btnTabel").style.color = view === "tabel" ? "#fff" : "#6b7280";
+  document.getElementById("btnGrafik").style.background = view === "grafik" ? "#5b3df0" : "#fff";
+  document.getElementById("btnGrafik").style.color = view === "grafik" ? "#fff" : "#6b7280";
+  if (view === "grafik" && _summaryData.length) renderChart();
+}}
+
+function renderChart() {{
+  var labels = _summaryData.map(function(r) {{ return r.group_label; }});
+  var dataContact = _summaryData.map(function(r) {{ return r.jumlah_contact; }});
+  var dataUnik = _summaryData.map(function(r) {{ return r.jumlah_unik; }});
+
+  var ctx = document.getElementById("summaryChart").getContext("2d");
+  if (_summaryChart) {{ _summaryChart.destroy(); }}
+  _summaryChart = new Chart(ctx, {{
+    type: "line",
+    data: {{
+      labels: labels,
+      datasets: [
+        {{
+          label: "Jumlah Contact",
+          data: dataContact,
+          borderColor: "#5b3df0",
+          backgroundColor: "rgba(91,61,240,0.1)",
+          tension: 0.3,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: "#5b3df0"
+        }},
+        {{
+          label: "Jumlah Unik Contact",
+          data: dataUnik,
+          borderColor: "#16a34a",
+          backgroundColor: "rgba(22,163,74,0.1)",
+          tension: 0.3,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: "#16a34a"
+        }}
+      ]
+    }},
+    options: {{
+      responsive: true,
+      plugins: {{
+        legend: {{ position: "top" }},
+        tooltip: {{ mode: "index", intersect: false }}
+      }},
+      scales: {{
+        y: {{ beginAtZero: true, ticks: {{ stepSize: 1 }} }}
+      }}
+    }}
+  }});
+}}
 var _labelCols = ["Non Donatur","No Respon","Respon","Donatur Rutin","Keluhan","Kerjasama","Laporan","Galang dana","Donasi","Lainnya"];
 
 function loadSummary() {{
@@ -1561,6 +1633,7 @@ function loadSummary() {{
     html += "</tr>";
 
     tbody.innerHTML = html;
+    if (_currentView === "grafik") renderChart();
   }})
   .catch(function() {{
     tbody.innerHTML = "<tr><td colspan=14 style='color:#dc2626;padding:20px;'>Gagal memuat.</td></tr>";
@@ -1644,8 +1717,14 @@ def laporan_chat_harian():
     </div>
   </div>
 
+  <!-- Grafik -->
+  <div id="grafikView" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#374151;">Tren Jumlah Contact</div>
+    <canvas id="summaryChart" style="max-height:350px;"></canvas>
+  </div>
+
   <!-- Tabel -->
-  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <div id="tabelView" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;min-width:700px;">
         <thead>
