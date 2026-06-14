@@ -2195,6 +2195,21 @@ def api_laporan_summary():
         })
 
     # Sort
+    # Untuk Hour: tambahkan semua jam 00-23 yang kosong
+    if group_by == "hour":
+        existing_keys = {r["group_key"] for r in rows}
+        for h in range(24):
+            hk = "%02d" % h
+            if hk not in existing_keys:
+                rows.append({
+                    "group_key": hk,
+                    "group_label": "%02d:00 - %02d:59" % (h, h),
+                    "jumlah_contact": 0,
+                    "jumlah_unik": 0,
+                    "sudah_label": 0,
+                    "pct_label": 0,
+                    "labels": dict((col, 0) for col in LABEL_COLS)
+                })
     rows.sort(key=lambda x: x["group_key"])
 
     # total_unik_all = semua nomor unik dalam seluruh periode (untuk hitung total %)
