@@ -2394,11 +2394,18 @@ def whatsapp_page():
               <select id="tmplHeaderType" onchange="onHeaderTypeChange()" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
                 <option value="">-- Pilih Tipe Judul --</option>
                 <option value="TEXT">TEXT</option>
+                <option value="IMAGE">IMAGE</option>
+                <option value="VIDEO">VIDEO</option>
+                <option value="DOCUMENT">DOCUMENT</option>
               </select>
             </div>
             <div id="tmplHeaderTextGroup" style="display:none;margin-bottom:16px;">
-              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Teks Judul</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;" id="tmplHeaderLabel">Teks Judul</label>
               <input type="text" id="tmplHeaderText" placeholder="Judul template..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="updateTemplatePreview()">
+              <div id="tmplHeaderFileGroup" style="display:none;margin-top:8px;">
+                <input type="file" id="tmplHeaderFile" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+                <div style="font-size:11px;color:#9ca3af;margin-top:4px;">File akan diupload saat template digunakan untuk blast</div>
+              </div>
             </div>
             <div style="margin-bottom:16px;">
               <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Isi <span style="color:#dc2626;">*</span></label>
@@ -2406,6 +2413,13 @@ def whatsapp_page():
                 <button type="button" onclick="insertParam()" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;">+ Parameter</button>
                 <button type="button" onclick="wrapText('*')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;font-weight:700;">Bold</button>
                 <button type="button" onclick="wrapText('_')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;font-style:italic;">Italic</button>
+                <button type="button" onclick="wrapText('~')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#f9fafb;text-decoration:line-through;">Strike</button>
+                <div style="position:relative;display:inline-block;">
+                  <button type="button" onclick="toggleEmojiPicker()" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;cursor:pointer;background:#f9fafb;" title="Emoji">😀</button>
+                  <div id="emojiPicker" style="display:none;position:absolute;top:32px;left:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:100;width:280px;max-height:200px;overflow-y:auto;">
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;" id="emojiGrid"></div>
+                  </div>
+                </div>
               </div>
               <textarea id="tmplBody" rows="5" placeholder="Isi pesan template..." maxlength="1024" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;" oninput="updateTemplatePreview();document.getElementById('tmplBodyCount').textContent=this.value.length"></textarea>
               <div style="font-size:11px;color:#9ca3af;margin-top:4px;"><span id="tmplBodyCount">0</span>/1024</div>
@@ -2441,14 +2455,17 @@ def whatsapp_page():
             </div>
           </div>
           <!-- Preview -->
-          <div style="width:240px;padding:20px;background:#f9fafb;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:12px;">Pratinjau</div>
-            <div style="background:#e5ddd5;border-radius:12px;padding:12px;min-height:200px;">
-              <div id="tmplPreview" style="background:#fff;border-radius:8px;padding:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.1);">
-                <div id="tmplPreviewHeader" style="font-weight:700;margin-bottom:6px;display:none;"></div>
-                <div id="tmplPreviewBody" style="color:#333;"></div>
-                <div id="tmplPreviewFooter" style="color:#999;font-size:11px;margin-top:6px;display:none;"></div>
+          <div style="width:260px;padding:16px;background:#f0ede8;flex-shrink:0;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><rect width=%2260%22 height=%2260%22 fill=%22%23e8e0d8%22/><circle cx=%2230%22 cy=%2230%22 r=%2218%22 fill=%22none%22 stroke=%22%23d4ccc4%22 stroke-width=%221%22/></svg>');">
+            <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:12px;">Pratinjau</div>
+            <div style="max-width:200px;">
+              <div id="tmplPreview" style="background:#fff;border-radius:0 10px 10px 10px;padding:10px 12px;font-size:13px;line-height:1.5;word-break:break-word;box-shadow:0 1px 3px rgba(0,0,0,.15);position:relative;">
+                <div id="tmplPreviewHeaderImg" style="display:none;background:#ccc;border-radius:6px;height:100px;margin-bottom:8px;display:none;align-items:center;justify-content:center;color:#666;font-size:12px;">📎 Media</div>
+                <div id="tmplPreviewHeader" style="font-weight:700;margin-bottom:6px;display:none;font-size:14px;"></div>
+                <div id="tmplPreviewBody" style="color:#111;white-space:pre-wrap;"></div>
+                <div id="tmplPreviewFooter" style="color:#999;font-size:11px;margin-top:6px;display:none;border-top:1px solid #f0f0f0;padding-top:4px;"></div>
+                <div style="text-align:right;font-size:10px;color:#999;margin-top:4px;">12:00 ✓✓</div>
               </div>
+              <div id="tmplPreviewBtns" style="margin-top:4px;display:flex;flex-direction:column;gap:4px;"></div>
             </div>
           </div>
         </div>
@@ -2676,9 +2693,68 @@ function closeTemplateForm() {
 
 function onHeaderTypeChange() {
   const t = document.getElementById("tmplHeaderType").value;
-  document.getElementById("tmplHeaderTextGroup").style.display = t === "TEXT" ? "block" : "none";
+  const group = document.getElementById("tmplHeaderTextGroup");
+  const textInput = document.getElementById("tmplHeaderText");
+  const fileGroup = document.getElementById("tmplHeaderFileGroup");
+  const label = document.getElementById("tmplHeaderLabel");
+
+  if (!t) {
+    group.style.display = "none";
+  } else if (t === "TEXT") {
+    group.style.display = "block";
+    textInput.style.display = "block";
+    fileGroup.style.display = "none";
+    label.textContent = "Teks Judul";
+    // Accept filter
+    const af = {"IMAGE":"image/*","VIDEO":"video/*","DOCUMENT":".pdf,.doc,.docx"};
+    document.getElementById("tmplHeaderFile").accept = af[t] || "*";
+  } else {
+    group.style.display = "block";
+    textInput.style.display = "none";
+    fileGroup.style.display = "block";
+    label.textContent = t + " File";
+    const af = {"IMAGE":"image/*","VIDEO":"video/*","DOCUMENT":".pdf,.doc,.docx"};
+    document.getElementById("tmplHeaderFile").accept = af[t] || "*";
+  }
   updateTemplatePreview();
 }
+
+// Emoji picker
+const EMOJIS = ["😀","😊","🙏","❤️","✅","🎉","👍","🔥","💪","😍","🤲","💝","🌙","⭐","🕌","📿","💰","🎁","📢","📣","✨","🙌","💯","🤝","👋","😇","🥰","😢","😭","🤗","💬","📱","🔔","⚡","🌟","💫","🎊","🎀","🌸","🌺","🍀","🌈","☀️","🌙","⏰","📅","📌","🔑","💡","📝","✍️","📊","💼","🏠","🚀","🌍","🤩","😎","🥳","🎯","💎","🏆","🎖️","🌻","🦋"];
+
+function initEmojiPicker() {
+  const grid = document.getElementById("emojiGrid");
+  if (!grid || grid.children.length > 0) return;
+  grid.innerHTML = EMOJIS.map(e =>
+    `<span onclick="insertEmoji('${e}')" style="cursor:pointer;font-size:20px;padding:4px;border-radius:4px;display:inline-block;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">${e}</span>`
+  ).join("");
+}
+
+function toggleEmojiPicker() {
+  const picker = document.getElementById("emojiPicker");
+  if (picker.style.display === "none") {
+    initEmojiPicker();
+    picker.style.display = "block";
+  } else {
+    picker.style.display = "none";
+  }
+}
+
+function insertEmoji(emoji) {
+  const ta = document.getElementById("tmplBody");
+  const pos = ta.selectionStart || ta.value.length;
+  ta.value = ta.value.slice(0, pos) + emoji + ta.value.slice(pos);
+  document.getElementById("emojiPicker").style.display = "none";
+  updateTemplatePreview();
+  document.getElementById("tmplBodyCount").textContent = ta.value.length;
+}
+
+document.addEventListener("click", function(e) {
+  const picker = document.getElementById("emojiPicker");
+  if (picker && !picker.contains(e.target) && !e.target.closest("[onclick*=toggleEmojiPicker]")) {
+    picker.style.display = "none";
+  }
+});
 
 function onBtnTypeChange() {
   const t = document.getElementById("tmplBtnType").value;
@@ -2740,15 +2816,53 @@ function wrapText(marker) {
 }
 
 function updateTemplatePreview() {
+  const headerType = document.getElementById("tmplHeaderType").value;
   const header = document.getElementById("tmplHeaderText").value;
   const body = document.getElementById("tmplBody").value;
   const footer = document.getElementById("tmplFooter").value;
   const hEl = document.getElementById("tmplPreviewHeader");
+  const hImgEl = document.getElementById("tmplPreviewHeaderImg");
   const bEl = document.getElementById("tmplPreviewBody");
   const fEl = document.getElementById("tmplPreviewFooter");
-  if (header) { hEl.textContent = header; hEl.style.display = "block"; } else { hEl.style.display = "none"; }
-  bEl.textContent = body || "";
+  const btnsEl = document.getElementById("tmplPreviewBtns");
+
+  // Header
+  if (headerType === "TEXT" && header) {
+    hEl.textContent = header;
+    hEl.style.display = "block";
+    hImgEl.style.display = "none";
+  } else if (["IMAGE","VIDEO","DOCUMENT"].includes(headerType)) {
+    const icons = {IMAGE:"🖼 Image", VIDEO:"🎥 Video", DOCUMENT:"📄 Document"};
+    hImgEl.textContent = icons[headerType] || "📎 Media";
+    hImgEl.style.display = "flex";
+    hEl.style.display = "none";
+  } else {
+    hEl.style.display = "none";
+    hImgEl.style.display = "none";
+  }
+
+  // Body - render bold (*text*) dan italic (_text_)
+  let bodyHtml = (body || "").replace(/</g,"&lt;")
+    .replace(/\*(.*?)\*/g,"<strong>$1</strong>")
+    .replace(/_(.*?)_/g,"<em>$1</em>")
+    .replace(/~(.*?)~/g,"<s>$1</s>")
+    .replace(/
+/g,"<br>");
+  bEl.innerHTML = bodyHtml;
+
+  // Footer
   if (footer) { fEl.textContent = footer; fEl.style.display = "block"; } else { fEl.style.display = "none"; }
+
+  // Buttons preview
+  const btnType = document.getElementById("tmplBtnType").value;
+  if (btnsEl) {
+    const btnEls = [];
+    document.querySelectorAll("#tmplBtnList [data-btn-text]").forEach(el => {
+      if (el.value) btnEls.push(`<div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;font-size:13px;color:#5b3df0;font-weight:600;">${el.value}</div>`);
+    });
+    btnsEl.innerHTML = btnEls.join("");
+  }
+
   document.getElementById("tmplNameCount").textContent = document.getElementById("tmplName").value.length;
 }
 
