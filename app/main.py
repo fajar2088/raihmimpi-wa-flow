@@ -2201,11 +2201,41 @@ function renderAttachTemplates() {
   const el = document.getElementById("attachTemplateItems");
   if (!el) return;
   if (!_chatTemplates.length) { el.innerHTML = ""; return; }
-  el.innerHTML = _chatTemplates.map(t => `
-    <div class="attach-menu-item" onclick="sendTemplateAttachment('${t.name}','${t.language||"id"}')">
-      <span class="icon">📢</span><span>${t.name.replace(/_/g," ")}</span>
+
+  const subItems = _chatTemplates.map(t => `
+    <div class="attach-menu-item" onclick="sendTemplateAttachment('${t.name}','${t.language||"id"}');closeTemplateSub();"
+      style="padding:10px 14px 10px 36px;font-size:13px;">
+      <span style="margin-right:8px;">📨</span><span>${t.name.replace(/_/g," ")}</span>
     </div>
-  `).join("") + '<div style="border-top:1px solid #f3f4f6;margin:4px 0;"></div>';
+  `).join("");
+
+  el.innerHTML = `
+    <div class="attach-menu-item" onclick="toggleTemplateSub(event)" id="templateSubToggle" style="position:relative;">
+      <span class="icon">📢</span><span>Template</span>
+      <span style="margin-left:auto;font-size:12px;color:#9ca3af;" id="templateSubArrow">▶</span>
+    </div>
+    <div id="templateSubMenu" style="display:none;background:#f9fafb;border-bottom:1px solid #f3f4f6;">
+      ${subItems}
+    </div>
+    <div style="border-top:1px solid #f3f4f6;margin:0;"></div>
+  `;
+}
+
+function toggleTemplateSub(e) {
+  e.stopPropagation();
+  const sub = document.getElementById("templateSubMenu");
+  const arrow = document.getElementById("templateSubArrow");
+  if (!sub) return;
+  const isOpen = sub.style.display !== "none";
+  sub.style.display = isOpen ? "none" : "block";
+  if (arrow) arrow.textContent = isOpen ? "▶" : "▼";
+}
+
+function closeTemplateSub() {
+  const sub = document.getElementById("templateSubMenu");
+  if (sub) sub.style.display = "none";
+  const arrow = document.getElementById("templateSubArrow");
+  if (arrow) arrow.textContent = "▶";
 }
 
 async function sendTemplateAttachment(templateName, language) {
