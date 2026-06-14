@@ -1300,6 +1300,16 @@ LAYOUT_CSS = """
   /* Chat / Inbox */
   .chat-wrap { display:flex; height:calc(100vh - 120px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
+  @media (max-width: 768px) {
+    .chat-wrap { height:calc(100vh - 80px); border-radius:8px; position:relative; }
+    .chat-list { width:100%; border-right:none; position:absolute; inset:0; z-index:10; background:#fff; transition:transform .25s; }
+    .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
+    .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; }
+    .chat-panel.show-mobile { transform:translateX(0); }
+    .mobile-back-btn { display:flex !important; }
+    .main { padding:12px; }
+  }
+  .mobile-back-btn { display:none; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid #eee; cursor:pointer; font-size:14px; color:#5b3df0; font-weight:600; background:#fff; }
   .chat-tabs { display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee; }
   .chat-tab { flex:1; text-align:center; padding:8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#f3f4f8; color:#6b7280; }
   .chat-tab.active { background:#5b3df0; color:#fff; }
@@ -1778,6 +1788,9 @@ async function openChat(phone) {
 
   const panel = document.getElementById("chatPanel");
   panel.innerHTML = `
+    <div class="mobile-back-btn" onclick="closeChatMobile()">
+      ← Kembali
+    </div>
     <div class="chat-header" style="position:relative;">
       <div class="chat-avatar">${initials(contact.name)}</div>
       <div style="flex:1;">
@@ -1824,6 +1837,14 @@ async function openChat(phone) {
       <button onclick="sendReply()">Kirim</button>
     </div>
   `;
+
+  // Mobile: sembunyikan list, tampilkan panel
+  if (window.innerWidth <= 768) {
+    const chatList = document.querySelector(".chat-list");
+    const chatPanel = document.getElementById("chatPanel");
+    if (chatList) chatList.classList.add("hidden-mobile");
+    if (chatPanel) chatPanel.classList.add("show-mobile");
+  }
 
   const msgEl = document.getElementById("chatMessages");
 
@@ -1907,6 +1928,14 @@ async function openChat(phone) {
 
   // refresh list (unread sudah ke-reset di server)
   loadContacts();
+}
+
+function closeChatMobile() {
+  const chatList = document.querySelector(".chat-list");
+  const chatPanel = document.getElementById("chatPanel");
+  if (chatList) chatList.classList.remove("hidden-mobile");
+  if (chatPanel) chatPanel.classList.remove("show-mobile");
+  currentPhone = null;
 }
 
 function toggleContactMenu(e) {
