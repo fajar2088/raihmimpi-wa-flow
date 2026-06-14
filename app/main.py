@@ -1654,7 +1654,12 @@ function renderItems() {
           <div class="chat-item-time">${formatTime(c.last_message_at)}</div>
         </div>
         <div class="chat-item-preview">${(c.last_message || "").replace(/</g,"&lt;")}</div>
-        ${(c.labels && c.labels.length) ? `<div class="chat-labels">${c.labels.map(l => `<span class="chat-label">${l}</span>`).join("")}</div>` : ""}
+        ${(c.labels && c.labels.length) ? `<div class="chat-labels">${c.labels.map(l => {
+          const lab = (window._labelAllLabels||[]).find(x => x.name === l);
+          const bg = lab ? (lab.bg_color||"#e0e7ff") : "#e0e7ff";
+          const color = lab ? (lab.text_color||"#4338ca") : "#4338ca";
+          return `<span class="chat-label" style="background:${bg};color:${color};">${l}</span>`;
+        }).join("")}</div>` : ""}
       </div>
       ${c.unread ? `<div class="chat-unread">${c.unread}</div>` : ""}
     </div>
