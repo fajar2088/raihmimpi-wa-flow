@@ -1315,7 +1315,7 @@ LAYOUT_CSS = """
   .chat-label { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; background:#e0e7ff; color:#4338ca; text-transform:uppercase; }
   .chat-unread { background:#ef4444; color:#fff; font-size:11px; font-weight:700; border-radius:10px; min-width:20px; height:20px; display:flex; align-items:center; justify-content:center; padding:0 6px; }
   .chat-empty { flex:1; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; flex-direction:column; gap:12px; text-align:center; padding:40px; }
-  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; height:100%; }
   .chat-header { padding:16px 20px; border-bottom:1px solid #eee; display:flex; align-items:center; gap:12px; }
   .chat-header .chat-avatar { width:36px; height:36px; font-size:13px; }
   .chat-header-name { font-weight:700; font-size:15px; }
