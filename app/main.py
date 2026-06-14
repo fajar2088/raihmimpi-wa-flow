@@ -1502,95 +1502,92 @@ def laporan_chat_harian():
   </div>
 
 <script>
-let _laporanData = [];
+var _laporanData = [];
 
-async function loadLaporan() {{
-  const from = document.getElementById("filterFrom").value;
-  const to = document.getElementById("filterTo").value;
-  const tbody = document.getElementById("laporanBody");
-  tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#9ca3af;">Memuat...</td></tr>';
+function loadLaporan() {
+  var from = document.getElementById("filterFrom").value;
+  var to = document.getElementById("filterTo").value;
+  var tbody = document.getElementById("laporanBody");
+  tbody.innerHTML = "<tr><td colspan=\"6\" style=\"padding:20px;text-align:center;color:#9ca3af;\">Memuat...</td></tr>";
 
-  try {{
-    const res = await fetch("/api/laporan/chat-harian?from=" + from + "&to=" + to);
-    const json = await res.json();
+  fetch("/api/laporan/chat-harian?from=" + from + "&to=" + to)
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
     _laporanData = json.rows || [];
-
     document.getElementById("totalUserInit").textContent = json.user_initiated || 0;
     document.getElementById("totalBizInit").textContent = json.business_initiated || 0;
 
-    if (!_laporanData.length) {{
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Tidak ada data pada rentang tanggal ini.</td></tr>';
+    if (!_laporanData.length) {
+      tbody.innerHTML = "<tr><td colspan=\"6\" style=\"padding:40px;text-align:center;color:#9ca3af;\">Tidak ada data.</td></tr>";
       document.getElementById("laporanInfo").textContent = "";
       return;
-    }}
+    }
 
-    // Group by kontak (tampilkan 1 baris per kontak per hari)
-    const seen = new Set();
-    const unique = [];
-    for (const r of _laporanData) {{
-      const key = r.chat_date + "_" + r.phone;
-      if (!seen.has(key)) {{
-        seen.add(key);
+    var seen = {};
+    var unique = [];
+    for (var i = 0; i < _laporanData.length; i++) {
+      var r = _laporanData[i];
+      var key = r.chat_date + "_" + r.phone;
+      if (!seen[key]) {
+        seen[key] = true;
         unique.push(r);
-      }}
-    }}
+      }
+    }
 
-    tbody.innerHTML = unique.map(r => {{
-      const typeColor = r.type === "User Initiated" ? "#2563eb" : "#16a34a";
-      const labels = (r.labels||[]).map(l =>
-        `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:#e0d9ff;color:#5b3df0;margin:1px;">${{l}}</span>`
-      ).join("") || "-";
-      return `<tr style="border-bottom:1px solid #f3f4f6;">
-        <td style="padding:12px 16px;font-size:13px;white-space:nowrap;">${{r.chat_date}}</td>
-        <td style="padding:12px 16px;font-size:13px;">${{r.nama_user}}</td>
-        <td style="padding:12px 16px;font-size:13px;font-weight:600;">${{r.nama}}</td>
-        <td style="padding:12px 16px;font-size:13px;color:#6b7280;">+${{r.phone}}</td>
-        <td style="padding:12px 16px;">
-          <span style="font-size:12px;font-weight:600;color:${{typeColor}}">${{r.type}}</span>
-        </td>
-        <td style="padding:12px 16px;">${{labels}}</td>
-      </tr>`;
-    }}).join("");
+    var html = "";
+    for (var j = 0; j < unique.length; j++) {
+      var r = unique[j];
+      var typeColor = r.type === "User Initiated" ? "#2563eb" : "#16a34a";
+      var labArr = r.labels || [];
+      var labHtml = "";
+      for (var k = 0; k < labArr.length; k++) {
+        labHtml += "<span style=\"display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:#e0d9ff;color:#5b3df0;margin:1px;\">" + labArr[k] + "</span>";
+      }
+      if (!labHtml) labHtml = "-";
+      html += "<tr style=\"border-bottom:1px solid #f3f4f6;\">";
+      html += "<td style=\"padding:12px 16px;font-size:13px;white-space:nowrap;\">" + r.chat_date + "</td>";
+      html += "<td style=\"padding:12px 16px;font-size:13px;\">" + r.nama_user + "</td>";
+      html += "<td style=\"padding:12px 16px;font-size:13px;font-weight:600;\">" + r.nama + "</td>";
+      html += "<td style=\"padding:12px 16px;font-size:13px;color:#6b7280;\">+" + r.phone + "</td>";
+      html += "<td style=\"padding:12px 16px;\"><span style=\"font-size:12px;font-weight:600;color:" + typeColor + "\">" + r.type + "</span></td>";
+      html += "<td style=\"padding:12px 16px;\">" + labHtml + "</td>";
+      html += "</tr>";
+    }
+    tbody.innerHTML = html;
+    document.getElementById("laporanInfo").textContent = "Menampilkan " + unique.length + " kontak dari " + _laporanData.length + " total pesan";
+  })
+  .catch(function(e) {
+    tbody.innerHTML = "<tr><td colspan=\"6\" style=\"padding:20px;color:#dc2626;\">Gagal memuat data.</td></tr>";
+  });
+}
 
-    document.getElementById("laporanInfo").textContent =
-      "Menampilkan " + unique.length + " kontak dari " + _laporanData.length + " total pesan";
-  }} catch(e) {{
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;color:#dc2626;">Gagal memuat data.</td></tr>';
-  }}
-}}
-
-function exportExcel() {{
-  if (!_laporanData.length) {{ alert("Tidak ada data untuk diexport. Klik Cari dulu."); return; }}
-
-  // Buat CSV
-  const seen = new Set();
-  const unique = [];
-  for (const r of _laporanData) {{
-    const key = r.chat_date + "_" + r.phone;
-    if (!seen.has(key)) {{ seen.add(key); unique.push(r); }}
-  }}
-
-  const headers = ["Chat Date","Nama User","Nama","Cell Phone","Type","Kontak Label"];
-  const rows = unique.map(r => [
-    r.chat_date,
-    r.nama_user,
-    r.nama,
-    "+" + r.phone,
-    r.type,
-    (r.labels||[]).join(", ")
-  ]);
-
-  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(",")).join("\n");
-  const blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+function exportExcel() {
+  if (!_laporanData.length) { alert("Tidak ada data. Klik Cari dulu."); return; }
+  var seen = {};
+  var unique = [];
+  for (var i = 0; i < _laporanData.length; i++) {
+    var r = _laporanData[i];
+    var key = r.chat_date + "_" + r.phone;
+    if (!seen[key]) { seen[key] = true; unique.push(r); }
+  }
+  var headers = ["Chat Date","Nama User","Nama","Cell Phone","Type","Kontak Label"];
+  var csvRows = [headers];
+  for (var j = 0; j < unique.length; j++) {
+    var r = unique[j];
+    csvRows.push([r.chat_date, r.nama_user, r.nama, "+" + r.phone, r.type, (r.labels||[]).join(", ")]);
+  }
+  var csv = csvRows.map(function(row) {
+    return row.map(function(v) { return '"' + String(v).replace(/"/g, '\"\\"\"') + '"'; }).join(",");
+  }).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
   a.href = url;
   a.download = "laporan_chat_" + document.getElementById("filterFrom").value + ".csv";
   a.click();
   URL.revokeObjectURL(url);
-}}
+}
 
-// Auto load hari ini
 loadLaporan();
 </script>
 """
