@@ -2161,6 +2161,7 @@ def whatsapp_page():
   <div class="settings-tabs">
     <div class="settings-tab active" data-tab="menu-utama" onclick="setSettingsTab(this)">Menu Utama</div>
     <div class="settings-tab" data-tab="wa-blast" onclick="setSettingsTab(this)">WA Blast</div>
+    <div class="settings-tab" data-tab="label-kontak" onclick="setSettingsTab(this)">Label Kontak</div>
   </div>
 
   <div class="settings-section active" id="section-menu-utama">
@@ -2206,13 +2207,200 @@ def whatsapp_page():
     </div>
   </div>
 
+  <div class="settings-section" id="section-label-kontak">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="margin:0;">Label Kontak</h2>
+        <button class="btn" onclick="showLabelForm()">+ Tambah Label</button>
+      </div>
+      <table class="labels-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;background:#f9fafb;">Nama Label</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;background:#f9fafb;">Kategori</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;background:#f9fafb;">Warna Latar</th>
+            <th style="padding:12px 16px;text-align:left;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;background:#f9fafb;">Warna Teks</th>
+            <th style="padding:12px 16px;text-align:right;font-size:13px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;background:#f9fafb;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="labelsTableBody">
+          <tr><td colspan="5" style="padding:40px;text-align:center;color:#9ca3af;">Memuat...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal form label -->
+    <div id="labelFormModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-width:90vw;">
+        <h3 id="labelFormTitle" style="margin:0 0 20px 0;font-size:18px;font-weight:700;">Tambah Label</h3>
+        <input type="hidden" id="labelFormId">
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Nama Label</label>
+          <input type="text" id="labelFormName" placeholder="contoh: VIP, Donatur Rutin..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Kategori</label>
+          <input type="text" id="labelFormCategory" placeholder="contoh: Donatur, Prospek..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:14px;display:flex;gap:16px;">
+          <div style="flex:1;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Warna Latar</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="color" id="labelFormBg" value="#eaf97b" style="width:50px;height:38px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;padding:2px;">
+              <input type="text" id="labelFormBgHex" value="#eaf97b" style="width:90px;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;" oninput="syncColor('labelFormBg','labelFormBgHex');updateLabelPreview()">
+            </div>
+          </div>
+          <div style="flex:1;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Warna Teks</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="color" id="labelFormText" value="#000000" style="width:50px;height:38px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;padding:2px;">
+              <input type="text" id="labelFormTextHex" value="#000000" style="width:90px;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;" oninput="syncColor('labelFormText','labelFormTextHex');updateLabelPreview()">
+            </div>
+          </div>
+        </div>
+        <div style="background:#f9fafb;padding:14px;border-radius:8px;margin-bottom:16px;text-align:center;">
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Preview</div>
+          <span id="labelPreview" style="display:inline-block;padding:6px 16px;border-radius:12px;font-size:13px;font-weight:600;background:#eaf97b;color:#000000;">Nama Label</span>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="closeLabelFormModal()" style="background:#f3f4f6;color:#374151;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;">Batal</button>
+          <button onclick="saveLabelForm()" style="background:#5b3df0;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script>
 function setSettingsTab(el) {
+  if (el.dataset.tab === "label-kontak") loadLabelsTable();
+  if (el.dataset.tab === "wa-blast") loadBlastContacts();
   document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".settings-section").forEach(s => s.classList.remove("active"));
   el.classList.add("active");
   document.getElementById("section-" + el.dataset.tab).classList.add("active");
   if (el.dataset.tab === "wa-blast") loadBlastContacts();
+}
+
+// ---- Label Kontak ----
+async function loadLabelsTable() {
+  const tbody = document.getElementById("labelsTableBody");
+  if (!tbody) return;
+  try {
+    const res = await fetch("/api/labels");
+    const json = await res.json();
+    const labels = json.labels || [];
+    if (!labels.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:40px;text-align:center;color:#9ca3af;">Belum ada label. Klik "+ Tambah Label" untuk membuat.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = labels.map(l => `
+      <tr>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;">
+          <span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;background:${l.bg_color||"#e0e7ff"};color:${l.text_color||"#4338ca"};">${l.name}</span>
+        </td>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;font-size:14px;color:#6b7280;">${l.category||"-"}</td>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:${l.bg_color||"#e0e7ff"};border:1px solid #e5e7eb;"></div>
+            <span style="font-family:monospace;font-size:12px;">${l.bg_color||""}</span>
+          </div>
+        </td>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:${l.text_color||"#000"};border:1px solid #e5e7eb;"></div>
+            <span style="font-family:monospace;font-size:12px;">${l.text_color||""}</span>
+          </div>
+        </td>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;text-align:right;">
+          <button onclick="editLabelForm('${l.id}','${l.name.replace(/'/g,"\'")}','${l.category||""}','${l.bg_color||"#eaf97b"}','${l.text_color||"#000000"}')" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:14px;padding:4px 8px;" title="Edit">✏️</button>
+          <button onclick="deleteLabelRow('${l.id}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;padding:4px 8px;" title="Hapus">🗑</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;color:#dc2626;">Gagal memuat label.</td></tr>';
+  }
+}
+
+function showLabelForm() {
+  document.getElementById("labelFormTitle").textContent = "Tambah Label";
+  document.getElementById("labelFormId").value = "";
+  document.getElementById("labelFormName").value = "";
+  document.getElementById("labelFormCategory").value = "";
+  document.getElementById("labelFormBg").value = "#eaf97b";
+  document.getElementById("labelFormBgHex").value = "#eaf97b";
+  document.getElementById("labelFormText").value = "#000000";
+  document.getElementById("labelFormTextHex").value = "#000000";
+  updateLabelPreview();
+  document.getElementById("labelFormModal").style.display = "flex";
+}
+
+function editLabelForm(id, name, category, bg, text) {
+  document.getElementById("labelFormTitle").textContent = "Edit Label";
+  document.getElementById("labelFormId").value = id;
+  document.getElementById("labelFormName").value = name;
+  document.getElementById("labelFormCategory").value = category;
+  document.getElementById("labelFormBg").value = bg;
+  document.getElementById("labelFormBgHex").value = bg;
+  document.getElementById("labelFormText").value = text;
+  document.getElementById("labelFormTextHex").value = text;
+  updateLabelPreview();
+  document.getElementById("labelFormModal").style.display = "flex";
+}
+
+function closeLabelFormModal() {
+  document.getElementById("labelFormModal").style.display = "none";
+}
+
+function syncColor(colorId, hexId) {
+  const hex = document.getElementById(hexId).value;
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    document.getElementById(colorId).value = hex;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  ["labelFormBg","labelFormText"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", function() {
+      document.getElementById(id+"Hex").value = this.value;
+      updateLabelPreview();
+    });
+  });
+});
+
+function updateLabelPreview() {
+  const name = document.getElementById("labelFormName").value || "Nama Label";
+  const bg = document.getElementById("labelFormBg").value || "#eaf97b";
+  const text = document.getElementById("labelFormText").value || "#000000";
+  const prev = document.getElementById("labelPreview");
+  if (prev) { prev.style.background = bg; prev.style.color = text; prev.textContent = name; }
+}
+
+async function saveLabelForm() {
+  const id = document.getElementById("labelFormId").value;
+  const name = document.getElementById("labelFormName").value.trim();
+  const category = document.getElementById("labelFormCategory").value.trim();
+  const bg_color = document.getElementById("labelFormBg").value;
+  const text_color = document.getElementById("labelFormText").value;
+  if (!name) { alert("Nama label wajib diisi"); return; }
+  const payload = {name, category, bg_color, text_color};
+  try {
+    const url = id ? `/api/labels/${id}` : "/api/labels";
+    const method = id ? "PUT" : "POST";
+    const res = await fetch(url, {method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    if (!res.ok) throw new Error(await res.text());
+    closeLabelFormModal();
+    loadLabelsTable();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function deleteLabelRow(id) {
+  if (!confirm("Hapus label ini?")) return;
+  try {
+    await fetch(`/api/labels/${id}`, {method:"DELETE"});
+    loadLabelsTable();
+  } catch(e) { alert("Error: " + e.message); }
 }
 
 // ---- Menu Utama ----
