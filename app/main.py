@@ -1805,6 +1805,7 @@ async function openChat(phone) {
         <div id="shortcutPopupList"></div>
       </div>
       <div id="attachMenu" class="attach-menu">
+        <div id="attachTemplateItems"></div>
         <div class="attach-menu-item" onclick="sendFlowAttachment()">
           <span class="icon">📋</span><span>Flow Donasi</span>
         </div>
@@ -2176,6 +2177,67 @@ document.addEventListener("click", function(e) {
     popup.classList.remove("open");
   }
 });
+
+// ---- Template Chat Attachment ----
+let _chatTemplates = [];
+let _allWaTemplates = [];
+
+async function reloadChatTemplates() {
+  try {
+    const [settRes, tmplRes] = await Promise.all([
+      fetch("/api/settings"),
+      fetch("/api/wa-templates")
+    ]);
+    const sett = await settRes.json();
+    const tmpl = await tmplRes.json();
+    const chatTemplateNames = sett.wa_chat_templates || [];
+    _allWaTemplates = tmpl.templates || [];
+    _chatTemplates = _allWaTemplates.filter(t => chatTemplateNames.includes(t.name) && t.status === "APPROVED");
+    renderAttachTemplates();
+  } catch(e) {}
+}
+
+function renderAttachTemplates() {
+  const el = document.getElementById("attachTemplateItems");
+  if (!el) return;
+  if (!_chatTemplates.length) { el.innerHTML = ""; return; }
+  el.innerHTML = _chatTemplates.map(t => `
+    <div class="attach-menu-item" onclick="sendTemplateAttachment('${t.name}','${t.language||"id"}')">
+      <span class="icon">📢</span><span>${t.name.replace(/_/g," ")}</span>
+    </div>
+  `).join("") + '<div style="border-top:1px solid #f3f4f6;margin:4px 0;"></div>';
+}
+
+async function sendTemplateAttachment(templateName, language) {
+  document.getElementById("attachMenu").classList.remove("open");
+  if (!currentPhone) return;
+
+  const loadingEl = document.createElement("div");
+  loadingEl.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#5b3df0;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;";
+  loadingEl.textContent = "Mengirim template " + templateName + "...";
+  document.body.appendChild(loadingEl);
+
+  try {
+    const res = await fetch("/api/wa-templates/send/" + currentPhone, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({name: templateName, language})
+    });
+    const json = await res.json();
+    document.body.removeChild(loadingEl);
+    if (json.status === "sent") {
+      openChat(currentPhone);
+    } else {
+      alert("Gagal kirim template: " + JSON.stringify(json.wa_body || json.error));
+    }
+  } catch(e) {
+    document.body.removeChild(loadingEl);
+    alert("Error: " + e.message);
+  }
+}
+
+// Load saat halaman chat dibuka
+reloadChatTemplates();
 
 function toggleAttachMenu(e) {
   e.stopPropagation();
@@ -2638,9 +2700,15 @@ async function loadTemplateTable() {
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#9ca3af;">Memuat dari Meta...</td></tr>';
   try {
-    const res = await fetch("/api/wa-templates");
+    const [res, settRes] = await Promise.all([
+      fetch("/api/wa-templates"),
+      fetch("/api/settings")
+    ]);
     const json = await res.json();
-    const list = json.templates || [];
+    const sett = await settRes.json();
+    const chatTemplates = (sett.wa_chat_templates || []);
+    let list = json.templates || [];
+    list = list.map(t => ({...t, is_chat_template: chatTemplates.includes(t.name)}));
     if (!list.length) {
       tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Belum ada template. Klik "+ Tambah Template".</td></tr>';
       return;
@@ -2659,7 +2727,14 @@ async function loadTemplateTable() {
         </td>
         <td style="padding:12px 16px;font-size:13px;color:#6b7280;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${bodyText}</td>
         <td style="padding:12px 16px;text-align:right;">
-          <button onclick="deleteTemplate('${t.id}','${t.name}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;padding:4px 8px;" title="Hapus">🗑</button>
+          <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#374151;margin-right:4px;" title="Set sebagai Template Chat">
+              <input type="checkbox" onchange="setTemplateChat('${t.id}','${t.name}',this.checked)" ${t.is_chat_template ? 'checked' : ''} style="cursor:pointer;">
+              <span>Template Chat</span>
+            </label>
+            <button onclick="copyTemplate('${t.id}','${t.name}')" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:14px;padding:4px 8px;" title="Copy">📋</button>
+            <button onclick="deleteTemplate('${t.id}','${t.name}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;padding:4px 8px;" title="Hapus">🗑</button>
+          </div>
         </td>
       </tr>`;
     }).join("");
@@ -2910,6 +2985,52 @@ async function saveTemplateForm() {
   } catch(e) {
     alert("Error: " + e.message);
   }
+}
+
+async function copyTemplate(id, name) {
+  const newName = prompt("Nama template baru (huruf kecil, underscore):", name + "_copy");
+  if (!newName) return;
+  // Fetch template detail
+  try {
+    const res = await fetch("/api/wa-templates");
+    const json = await res.json();
+    const t = (json.templates || []).find(x => x.id === id);
+    if (!t) { alert("Template tidak ditemukan"); return; }
+    const bodyComp = (t.components||[]).find(c => c.type === "BODY");
+    const headerComp = (t.components||[]).find(c => c.type === "HEADER");
+    const footerComp = (t.components||[]).find(c => c.type === "FOOTER");
+    const payload = {
+      name: newName.toLowerCase().replace(/[^a-z0-9_]/g,""),
+      category: t.category,
+      language: t.language,
+      body_text: bodyComp ? bodyComp.text : "",
+      header_type: headerComp ? headerComp.format : "",
+      header_text: (headerComp && headerComp.format === "TEXT") ? headerComp.text : "",
+      footer_text: footerComp ? footerComp.text : "",
+      buttons: []
+    };
+    const saveRes = await fetch("/api/wa-templates", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    const saveJson = await saveRes.json();
+    if (saveJson.error) { alert("Error: " + saveJson.error); return; }
+    alert("Template berhasil di-copy sebagai '" + payload.name + "'. Status: PENDING.");
+    loadTemplateTable();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function setTemplateChat(id, name, checked) {
+  try {
+    await fetch("/api/wa-templates/chat-setting", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({name, enabled: checked})
+    });
+    // Reload attachment menu shortcuts
+    await reloadChatTemplates();
+  } catch(e) { alert("Error: " + e.message); }
 }
 
 async function deleteTemplate(id, name) {
@@ -3811,6 +3932,64 @@ def api_wa_templates_delete(template_id):
         return jsonify({"status": resp.status_code, "result": resp.json()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/wa-templates/chat-setting", methods=["POST"])
+def api_wa_templates_chat_setting():
+    """Set/unset template sebagai Template Chat (simpan ke settings)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        name = body.get("name", "")
+        enabled = body.get("enabled", False)
+        settings = load_settings()
+        chat_templates = settings.get("wa_chat_templates", [])
+        if enabled and name not in chat_templates:
+            chat_templates.append(name)
+        elif not enabled and name in chat_templates:
+            chat_templates.remove(name)
+        settings["wa_chat_templates"] = chat_templates
+        save_settings(settings)
+        return jsonify({"status": "ok", "wa_chat_templates": chat_templates})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/wa-templates/send/<phone>", methods=["POST"])
+def api_wa_templates_send(phone):
+    """Kirim template message ke kontak."""
+    try:
+        body = request.get_json(silent=True) or {}
+        template_name = body.get("name", "")
+        language = body.get("language", "id")
+        components = body.get("components", [])
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": language},
+            }
+        }
+        if components:
+            payload["template"]["components"] = components
+
+        resp = requests.post(
+            f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages",
+            headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}", "Content-Type": "application/json"},
+            json=payload, timeout=15
+        )
+        logger.info(f"api_wa_templates_send to={phone} template={template_name} status={resp.status_code}")
+        record_outgoing_message(phone, f"📢 Template: {template_name}", msg_type="text")
+        return jsonify({"status": "sent", "wa_status": resp.status_code, "wa_body": resp.json()})
+    except Exception as e:
+        logger.error(f"api_wa_templates_send error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/settings", methods=["GET"])
+def api_settings_get():
+    """Get settings (untuk frontend baca wa_chat_templates dll)."""
+    settings = load_settings()
+    return jsonify(settings)
 
 @app.route("/api/test-templates", methods=["GET"])
 def api_test_templates():
