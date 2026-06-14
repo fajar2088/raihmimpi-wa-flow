@@ -1448,10 +1448,7 @@ def pengguna_page():
     user = {"nama": session.get("user_nama",""), "email": session.get("user_email",""), "role": session.get("user_role","")}
     body = f"""
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-    <div>
-      <h2 style="margin:0;font-size:22px;font-weight:800;">Daftar Pengguna</h2>
-      <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Kelola akses pengguna sistem Raihmimpi</p>
-    </div>
+    <div></div>
     <button onclick="showUserForm()" class="btn">+ Tambah Pengguna</button>
   </div>
 
@@ -1624,7 +1621,7 @@ async function deleteUser(id, nama) {{
 }}
 </script>
 """
-    return Response(render_page("pengaturan", "Daftar Pengguna", "", body), mimetype="text/html")
+    return Response(render_page("pengaturan", "Daftar Pengguna", "Kelola akses pengguna sistem Raihmimpi", body), mimetype="text/html")
 
 @app.route("/logout")
 def logout():
