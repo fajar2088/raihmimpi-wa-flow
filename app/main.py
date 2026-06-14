@@ -1197,30 +1197,124 @@ def api_save_menu_utama():
     save_settings(settings)
     return jsonify(settings["menu_utama"])
 
+# ============================================================
+# BLAST HISTORY FILE
+# ============================================================
+BLAST_FILE = os.environ.get("DATA_DIR", "/tmp") + "/blast_history.json"
+
+def load_blast_history():
+    if not os.path.exists(BLAST_FILE):
+        return []
+    try:
+        with open(BLAST_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_blast_history(data):
+    with open(BLAST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 @app.route("/api/blast", methods=["POST"])
 def api_blast():
-    """Kirim pesan broadcast (WA Blast) ke beberapa kontak via Graph API.
-    Body: {"phones": ["62..."], "message": "..."}"""
-    body = request.get_json(silent=True) or {}
-    phones = body.get("phones", [])
-    message = (body.get("message") or "").strip()
-    if not phones:
-        return jsonify({"error": "phones wajib diisi"}), 400
-    if not message:
-        return jsonify({"error": "message wajib diisi"}), 400
+    """Kirim WA Blast via Meta Template API."""
+    try:
+        body = request.get_json(silent=True) or {}
+        phones = body.get("phones", [])
+        template_name = body.get("template_name", "")
+        template_language = body.get("template_language", "id")
+        judul = body.get("judul", "")
+        judul_campaign = body.get("judul_campaign", "")
+        kategori = body.get("kategori", "MARKETING")
+        header_type = body.get("header_type", "")
+        body_params = body.get("body_params", [])
 
-    results = []
-    for phone in phones:
-        try:
-            send_wa_message(phone, message)
-            record_outgoing_message(phone, message, msg_type="text")
-            results.append({"phone": phone, "status": "sent"})
-        except Exception as e:
-            logger.error(f"api_blast error for {phone}: {e}", exc_info=True)
-            results.append({"phone": phone, "status": "error", "error": str(e)})
+        if not phones:
+            return jsonify({"error": "phones wajib diisi"}), 400
+        if not template_name:
+            return jsonify({"error": "template_name wajib diisi"}), 400
 
-    sent_count = sum(1 for r in results if r["status"] == "sent")
-    return jsonify({"total": len(phones), "sent": sent_count, "results": results})
+        blast_id = f"blast_{int(datetime.now().timestamp()*1000)}"
+        results = []
+
+        for phone in phones:
+            try:
+                # Build template payload
+                components = []
+                if body_params:
+                    components.append({
+                        "type": "body",
+                        "parameters": [{"type": "text", "text": p} for p in body_params]
+                    })
+
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone,
+                    "type": "template",
+                    "template": {
+                        "name": template_name,
+                        "language": {"code": template_language},
+                    }
+                }
+                if components:
+                    payload["template"]["components"] = components
+
+                resp = requests.post(
+                    f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages",
+                    headers={"Authorization": f"Bearer {WA_ACCESS_TOKEN}", "Content-Type": "application/json"},
+                    json=payload, timeout=15
+                )
+                wa_resp = resp.json()
+                status = "sent" if resp.ok else "error"
+                record_outgoing_message(phone, f"📢 Blast: {template_name}", msg_type="text")
+                results.append({"phone": phone, "status": status, "wa_id": wa_resp.get("messages", [{}])[0].get("id", "")})
+            except Exception as e:
+                logger.error(f"api_blast error for {phone}: {e}", exc_info=True)
+                results.append({"phone": phone, "status": "error", "error": str(e)})
+
+        sent_count = sum(1 for r in results if r["status"] == "sent")
+
+        # Simpan history
+        history = load_blast_history()
+        history.insert(0, {
+            "id": blast_id,
+            "judul": judul,
+            "judul_campaign": judul_campaign,
+            "kategori": kategori,
+            "template_name": template_name,
+            "template_language": template_language,
+            "header_type": header_type,
+            "phones": phones,
+            "total": len(phones),
+            "sent": sent_count,
+            "in_progress": 0,
+            "delivered": 0,
+            "read": 0,
+            "failed": len(phones) - sent_count,
+            "status": "DONE",
+            "created_at": datetime.now().isoformat(),
+            "results": results
+        })
+        save_blast_history(history)
+
+        return jsonify({"blast_id": blast_id, "total": len(phones), "sent": sent_count, "results": results})
+    except Exception as e:
+        logger.error(f"api_blast error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/blast/history", methods=["GET"])
+def api_blast_history():
+    """List history WA Blast."""
+    history = load_blast_history()
+    return jsonify({"history": history})
+
+@app.route("/api/blast/history/<blast_id>", methods=["DELETE"])
+def api_blast_history_delete(blast_id):
+    """Hapus history blast."""
+    history = load_blast_history()
+    history = [h for h in history if h["id"] != blast_id]
+    save_blast_history(history)
+    return jsonify({"status": "deleted"})
 
 
 @app.route("/api/donasi", methods=["GET"])
@@ -2657,24 +2751,170 @@ def whatsapp_page():
   </div>
 
   <div class="settings-section" id="section-wa-blast">
-    <div class="panel">
-      <h2>WA Blast</h2>
-      <p class="form-hint" style="margin-bottom:16px;">Kirim pesan broadcast ke kontak yang sudah pernah chat dengan Raihmimpi.</p>
-
-      <div class="form-group">
-        <label>Pilih Kontak</label>
-        <div class="blast-count" id="blastCount">0 kontak dipilih</div>
-        <div class="blast-contacts" id="blastContacts">Memuat kontak...</div>
-        <button class="btn secondary" type="button" onclick="toggleAllBlast()">Pilih/Batal Semua</button>
+    <!-- VIEW: Daftar Blast -->
+    <div id="blastListView">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="margin:0;">Daftar WhatsApp Blast</h2>
+        <button class="btn" onclick="showBlastForm()">+ Buat Blast</button>
       </div>
 
-      <div class="form-group">
-        <label>Isi Pesan</label>
-        <textarea id="blastMessage" placeholder="Tulis pesan broadcast..."></textarea>
+      <!-- Filter -->
+      <div style="background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Filter Tanggal</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="date" id="blastFilterFrom" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+              <span style="color:#9ca3af;">→</span>
+              <input type="date" id="blastFilterTo" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+            </div>
+          </div>
+          <button onclick="loadBlastHistory()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
+        </div>
       </div>
 
-      <button class="btn" onclick="sendBlast()">Kirim Blast</button>
-      <span class="save-msg" id="blastSendMsg"></span>
+      <!-- Tabel -->
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Judul Campaign</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Tanggal Blast</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Nama Template</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Kategori</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Status</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Sent</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Delivered</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Read</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Failed</th>
+              <th style="padding:12px 16px;text-align:right;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="blastHistoryBody">
+            <tr><td colspan="11" style="padding:40px;text-align:center;color:#9ca3af;">Memuat...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VIEW: Form Buat Blast -->
+    <div id="blastFormView" style="display:none;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+        <button onclick="showBlastList()" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:20px;">←</button>
+        <h2 style="margin:0;">Buat Blast</h2>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+          <div class="form-group">
+            <label>Kategori <span style="color:#dc2626;">*</span></label>
+            <select id="blastKategori" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="MARKETING">MARKETING</option>
+              <option value="UTILITY">UTILITY</option>
+              <option value="AUTHENTICATION">AUTHENTICATION</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Nama Template Blast <span style="color:#dc2626;">*</span></label>
+            <select id="blastTemplate" onchange="onBlastTemplateChange()" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="">-- Pilih Template --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Judul <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="blastJudul" placeholder="Judul blast..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          </div>
+
+          <div class="form-group">
+            <label>Judul Campaign</label>
+            <input type="text" id="blastJudulCampaign" placeholder="Nama campaign..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          </div>
+
+          <div class="form-group">
+            <label>Header Type</label>
+            <select id="blastHeaderType" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="">-- Pilih Header Type --</option>
+              <option value="TEXT">TEXT</option>
+              <option value="IMAGE">IMAGE</option>
+              <option value="VIDEO">VIDEO</option>
+              <option value="DOCUMENT">DOCUMENT</option>
+              <option value="CAROUSEL">CAROUSEL</option>
+              <option value="CAROUSEL_PRODUCT">CAROUSEL_PRODUCT</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Label Contact</label>
+            <select id="blastLabelFilter" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
+              <option value="">-- Semua Kontak --</option>
+            </select>
+          </div>
+
+        </div>
+
+        <!-- Preview template body -->
+        <div id="blastTemplatePreview" style="display:none;background:#f0edff;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;color:#374151;border-left:3px solid #5b3df0;">
+          <div style="font-size:11px;font-weight:700;color:#5b3df0;margin-bottom:6px;">PREVIEW TEMPLATE</div>
+          <div id="blastTemplatePreviewBody"></div>
+        </div>
+
+        <!-- Parameter body jika ada {{1}} -->
+        <div id="blastParamsGroup" style="display:none;margin-bottom:16px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;">Parameter Body</label>
+          <div id="blastParamsList"></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="form-group" style="margin:0;">
+            <label>Atur Jadwal Blast <span style="color:#dc2626;">*</span></label>
+            <div style="display:flex;gap:16px;margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;">
+                <input type="radio" name="blastSchedule" value="now" checked onchange="onScheduleChange(this)"> Kirim Sekarang
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;">
+                <input type="radio" name="blastSchedule" value="schedule" onchange="onScheduleChange(this)"> Atur Jadwal
+              </label>
+            </div>
+          </div>
+          <div id="blastScheduleInput" style="display:none;">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Waktu Blast</label>
+            <input type="datetime-local" id="blastScheduleTime" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+          </div>
+        </div>
+
+        <!-- Pilih Kontak -->
+        <div style="margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label style="font-size:13px;font-weight:600;">Pilih Kontak <span style="color:#dc2626;">*</span></label>
+            <div style="display:flex;gap:8px;">
+              <button onclick="toggleAllBlast()" style="padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;">Pilih Semua</button>
+              <span id="blastCount" style="font-size:12px;color:#6b7280;align-self:center;">0 dipilih</span>
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <input type="text" id="blastContactSearch" placeholder="Cari nama atau nomor..." oninput="filterBlastContacts(this.value)"
+              style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box;">
+          </div>
+          <div class="blast-contacts" id="blastContacts" style="max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
+            Memuat kontak...
+          </div>
+        </div>
+
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin-bottom:20px;">
+          ⚠️ Jumlah maksimal karakter body adalah 1024 karakter, sudah termasuk parameter yang anda input.
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button onclick="showBlastList()" style="padding:10px 20px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-weight:600;">Batal</button>
+          <button onclick="sendBlastNew()" style="padding:10px 28px;background:#5b3df0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;">Kirim WhatsApp</button>
+        </div>
+        <div id="blastSendMsg" style="margin-top:12px;font-size:13px;text-align:right;"></div>
+      </div>
     </div>
   </div>
 
@@ -2962,7 +3202,7 @@ def whatsapp_page():
 <script>
 function setSettingsTab(el) {
   if (el.dataset.tab === "label-kontak") loadLabelsTable();
-  if (el.dataset.tab === "wa-blast") loadBlastContacts();
+  if (el.dataset.tab === "wa-blast") loadBlastHistory();
   if (el.dataset.tab === "shortcuts") loadShortcutsTable();
   if (el.dataset.tab === "wa-template") loadTemplateTable();
   document.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
@@ -3436,6 +3676,241 @@ async function deleteShortcut(id) {
     await fetch("/api/shortcuts/" + id, {method:"DELETE"});
     loadShortcutsTable();
   } catch(e) { alert("Error: " + e.message); }
+}
+
+// ---- WA Blast ----
+let _blastAllContacts = [];
+let _blastTemplates = [];
+
+function showBlastForm() {
+  document.getElementById("blastListView").style.display = "none";
+  document.getElementById("blastFormView").style.display = "block";
+  loadBlastTemplates();
+  loadBlastContactList();
+  loadBlastLabels();
+}
+
+function showBlastList() {
+  document.getElementById("blastFormView").style.display = "none";
+  document.getElementById("blastListView").style.display = "block";
+  loadBlastHistory();
+}
+
+async function loadBlastHistory() {
+  const tbody = document.getElementById("blastHistoryBody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="11" style="padding:20px;text-align:center;color:#9ca3af;">Memuat...</td></tr>';
+  try {
+    const res = await fetch("/api/blast/history");
+    const json = await res.json();
+    const list = json.history || [];
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="11" style="padding:40px;text-align:center;color:#9ca3af;">Belum ada blast. Klik "+ Buat Blast".</td></tr>';
+      return;
+    }
+    const statusColor = {DONE:"#16a34a", PENDING:"#d97706", FAILED:"#dc2626", SENDING:"#2563eb"};
+    tbody.innerHTML = list.map(b => {
+      const sc = statusColor[b.status] || "#6b7280";
+      const dt = b.created_at ? b.created_at.replace("T"," ").substring(0,16) : "-";
+      return `<tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 16px;font-size:13px;font-weight:600;color:#5b3df0;cursor:pointer;" onclick="showBlastDetail('${b.id}')">${b.judul_campaign || b.judul || "-"}</td>
+        <td style="padding:12px 16px;font-size:12px;color:#6b7280;white-space:nowrap;">${dt}</td>
+        <td style="padding:12px 16px;font-size:13px;">${b.template_name||"-"}</td>
+        <td style="padding:12px 16px;font-size:12px;">${b.kategori||"-"}</td>
+        <td style="padding:12px 16px;">
+          <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${sc}20;color:${sc};">${b.status}</span>
+        </td>
+        <td style="padding:12px 16px;text-align:center;font-size:13px;">${b.total||0}</td>
+        <td style="padding:12px 16px;text-align:center;font-size:13px;color:#2563eb;">${b.sent||0}</td>
+        <td style="padding:12px 16px;text-align:center;font-size:13px;color:#16a34a;">${b.delivered||0}</td>
+        <td style="padding:12px 16px;text-align:center;font-size:13px;color:#7c3aed;">${b.read||0}</td>
+        <td style="padding:12px 16px;text-align:center;font-size:13px;color:#dc2626;">${b.failed||0}</td>
+        <td style="padding:12px 16px;text-align:right;">
+          <button onclick="deleteBlast('${b.id}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;" title="Hapus">🗑</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="11" style="padding:20px;color:#dc2626;">Gagal memuat.</td></tr>';
+  }
+}
+
+async function deleteBlast(id) {
+  if (!confirm("Hapus history blast ini?")) return;
+  await fetch("/api/blast/history/" + id, {method:"DELETE"});
+  loadBlastHistory();
+}
+
+function showBlastDetail(id) {
+  alert("Detail blast " + id + " - Coming soon");
+}
+
+async function loadBlastTemplates() {
+  const sel = document.getElementById("blastTemplate");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/wa-templates");
+    const json = await res.json();
+    _blastTemplates = (json.templates || json.raw?.data || []).filter(t => t.status === "APPROVED");
+    sel.innerHTML = '<option value="">-- Pilih Template --</option>' +
+      _blastTemplates.map(t => `<option value="${t.name}" data-lang="${t.language||"id"}">${t.name.replace(/_/g," ")} (${t.language||"id"})</option>`).join("");
+  } catch(e) {}
+}
+
+function onBlastTemplateChange() {
+  const sel = document.getElementById("blastTemplate");
+  const name = sel.value;
+  const preview = document.getElementById("blastTemplatePreview");
+  const previewBody = document.getElementById("blastTemplatePreviewBody");
+  const paramsGroup = document.getElementById("blastParamsGroup");
+  const paramsList = document.getElementById("blastParamsList");
+
+  if (!name) {
+    preview.style.display = "none";
+    paramsGroup.style.display = "none";
+    return;
+  }
+
+  const tmpl = _blastTemplates.find(t => t.name === name);
+  if (!tmpl) return;
+
+  const bodyComp = (tmpl.components||[]).find(c => c.type === "BODY");
+  const bodyText = bodyComp ? bodyComp.text : "";
+  previewBody.textContent = bodyText;
+  preview.style.display = "block";
+
+  // Detect parameters {{1}}, {{2}}, etc
+  const params = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+  if (params.length) {
+    paramsList.innerHTML = params.map((p, i) => `
+      <div style="margin-bottom:8px;">
+        <label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px;">Parameter ${p}</label>
+        <input type="text" data-param="${i}" placeholder="Isi parameter ${p}..."
+          style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+    `).join("");
+    paramsGroup.style.display = "block";
+  } else {
+    paramsGroup.style.display = "none";
+  }
+}
+
+async function loadBlastContactList() {
+  const el = document.getElementById("blastContacts");
+  if (!el) return;
+  try {
+    const res = await fetch("/api/inbox");
+    const json = await res.json();
+    _blastAllContacts = json.contacts || [];
+    renderBlastContacts(_blastAllContacts);
+  } catch(e) {
+    el.innerHTML = '<div style="color:#dc2626;padding:8px;">Gagal memuat kontak.</div>';
+  }
+}
+
+function renderBlastContacts(contacts) {
+  const el = document.getElementById("blastContacts");
+  const countEl = document.getElementById("blastCount");
+  if (!el) return;
+  if (!contacts.length) {
+    el.innerHTML = '<div style="padding:12px;color:#9ca3af;text-align:center;">Tidak ada kontak.</div>';
+    return;
+  }
+  el.innerHTML = contacts.map(c => `
+    <div class="blast-contact-item">
+      <input type="checkbox" class="blast-chk" value="${c.phone}" id="bchk_${c.phone}">
+      <label for="bchk_${c.phone}" style="cursor:pointer;flex:1;">
+        <div style="font-size:13px;font-weight:600;">${c.name||c.phone}</div>
+        <div style="font-size:11px;color:#9ca3af;">+${c.phone}</div>
+      </label>
+    </div>
+  `).join("");
+  document.querySelectorAll(".blast-chk").forEach(chk => {
+    chk.addEventListener("change", updateBlastCount);
+  });
+  updateBlastCount();
+}
+
+function filterBlastContacts(val) {
+  const q = val.toLowerCase();
+  const filtered = q ? _blastAllContacts.filter(c =>
+    (c.name||"").toLowerCase().includes(q) || (c.phone||"").includes(q)
+  ) : _blastAllContacts;
+  renderBlastContacts(filtered);
+}
+
+function updateBlastCount() {
+  const checked = document.querySelectorAll(".blast-chk:checked").length;
+  const el = document.getElementById("blastCount");
+  if (el) el.textContent = checked + " dipilih";
+}
+
+function toggleAllBlast() {
+  const chks = document.querySelectorAll(".blast-chk");
+  const allChecked = Array.from(chks).every(c => c.checked);
+  chks.forEach(c => { c.checked = !allChecked; });
+  updateBlastCount();
+}
+
+async function loadBlastLabels() {
+  const sel = document.getElementById("blastLabelFilter");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/labels");
+    const json = await res.json();
+    const labels = json.labels || [];
+    sel.innerHTML = '<option value="">-- Semua Kontak --</option>' +
+      labels.map(l => `<option value="${l.name}">${l.name}</option>`).join("");
+  } catch(e) {}
+}
+
+function onScheduleChange(el) {
+  document.getElementById("blastScheduleInput").style.display =
+    el.value === "schedule" ? "block" : "none";
+}
+
+async function sendBlastNew() {
+  const templateName = document.getElementById("blastTemplate").value;
+  const judul = document.getElementById("blastJudul").value.trim();
+  const judulCampaign = document.getElementById("blastJudulCampaign").value.trim();
+  const kategori = document.getElementById("blastKategori").value;
+  const headerType = document.getElementById("blastHeaderType").value;
+
+  if (!templateName) { alert("Pilih template terlebih dahulu"); return; }
+  if (!judul) { alert("Judul wajib diisi"); return; }
+
+  const phones = Array.from(document.querySelectorAll(".blast-chk:checked")).map(c => c.value);
+  if (!phones.length) { alert("Pilih minimal 1 kontak"); return; }
+
+  // Collect params
+  const body_params = Array.from(document.querySelectorAll("#blastParamsList input")).map(i => i.value);
+
+  const sel = document.getElementById("blastTemplate");
+  const opt = sel.options[sel.selectedIndex];
+  const lang = opt ? (opt.dataset.lang || "id") : "id";
+
+  const msgEl = document.getElementById("blastSendMsg");
+  msgEl.style.color = "#6b7280";
+  msgEl.textContent = "Mengirim blast ke " + phones.length + " kontak...";
+
+  try {
+    const res = await fetch("/api/blast", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        phones, template_name: templateName, template_language: lang,
+        judul, judul_campaign: judulCampaign, kategori, header_type: headerType, body_params
+      })
+    });
+    const json = await res.json();
+    if (json.error) { msgEl.style.color="#dc2626"; msgEl.textContent="Error: "+json.error; return; }
+    msgEl.style.color = "#16a34a";
+    msgEl.textContent = "Berhasil! " + json.sent + "/" + json.total + " pesan terkirim.";
+    setTimeout(() => { showBlastList(); }, 2000);
+  } catch(e) {
+    msgEl.style.color = "#dc2626";
+    msgEl.textContent = "Error: " + e.message;
+  }
 }
 
 // ---- Label Kontak ----
