@@ -1865,13 +1865,14 @@ def api_laporan_chat_harian():
         is_ads = bool(contact.get("ctwa_clid") or contact.get("ad_headline"))
         
         for date_part, day_msgs in days.items():
-            # Tentukan tipe berdasarkan pesan PERTAMA di hari itu
+            # Tentukan tipe: kalau ada pesan masuk dari user = User Initiated
+            has_incoming = any(m.get("direction", "in") == "in" for m in day_msgs)
             first_msg = min(day_msgs, key=lambda m: m.get("timestamp", ""))
             first_direction = first_msg.get("direction", "in")
             
             if is_ads:
                 msg_type = "Ads"
-            elif first_direction == "in":
+            elif has_incoming:
                 msg_type = "User Initiated"
             else:
                 msg_type = "Business Initiated"
