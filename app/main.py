@@ -605,12 +605,6 @@ def handle_flow_request(decrypted_body):
             except (ValueError, TypeError):
                 final_nominal = int(nominal) if str(nominal).isdigit() else 50000
 
-            phone_atc = flow_token.replace("phone_", "") if flow_token.startswith("phone_") else ""
-            send_pixel_event("AddToCart", phone=phone_atc, value=final_nominal, currency="IDR",
-                              event_id=f"atc_{flow_token}_{kampanye_id}",
-                              content_name=kampanye_nama,
-                              content_ids=[kampanye_id] if kampanye_id else None,
-                              ctwa_clid=get_ctwa_for_phone(phone_atc))
 
             try:
                 nominal_lain_int = int(nominal_lain) if nominal_lain else 0
