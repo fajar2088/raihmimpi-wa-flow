@@ -1301,7 +1301,7 @@ LAYOUT_CSS = """
   .chat-wrap { display:flex; height:calc(100vh - 52px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
   @media (max-width: 768px) {
-    .chat-wrap { height:calc(100vh - 80px); border-radius:8px; position:relative; }
+    .chat-wrap { height:calc(100vh - 20px); border-radius:8px; position:relative; }
     .chat-list { width:100%; border-right:none; position:absolute; inset:0; z-index:10; background:#fff; transition:transform .25s; }
     .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
     .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; }
