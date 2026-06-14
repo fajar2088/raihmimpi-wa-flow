@@ -536,6 +536,15 @@ def handle_flow_request(decrypted_body):
                           event_id=f"vc_{flow_token}_{int(time.time())}",
                           content_name="Donasi via WA Raihmimpi",
                           ctwa_clid=get_ctwa_for_phone(phone_init))
+        # Simpan flag view_content ke contact
+        if phone_init:
+            try:
+                inbox_vc = load_inbox()
+                if phone_init in inbox_vc.get("contacts", {}):
+                    inbox_vc["contacts"][phone_init]["view_content_at"] = datetime.now().isoformat()
+                    save_inbox(inbox_vc)
+            except Exception as vce:
+                logger.error(f"Gagal simpan view_content_at: {vce}")
         return {"screen": "PILIH_TIPE", "data": {"kampanye_list": format_campaigns_with_images(campaigns)}}
 
     if action == "data_exchange":
