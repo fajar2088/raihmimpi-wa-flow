@@ -1649,11 +1649,15 @@ function showTrackingDetail(idx) {{
   var contacts = c.contacts || [];
   var tbody = document.getElementById("trackingDetailBody");
   tbody.innerHTML = contacts.map(function(ct) {{
+    var ev = ct.event || "Contact";
+    var evColors = {{"Contact":"#6b7280","Lead Submitted":"#5b3df0","View Content":"#0891b2","Add to Cart":"#d97706","Purchase":"#16a34a"}};
+    var ec = evColors[ev] || "#6b7280";
     return "<tr style='border-bottom:1px solid #f3f4f6;'>" +
       "<td style='padding:12px 16px;font-size:13px;font-weight:600;'>" + ct.nama + "</td>" +
       "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + ct.phone + "</td>" +
       "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + (ct.first_msg||"-") + "</td>" +
       "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + (ct.first_date||"-") + "</td>" +
+      "<td style='padding:12px 16px;'><span style='font-size:12px;font-weight:700;color:" + ec + ";'>" + ev + "</span></td>" +
       "</tr>";
   }}).join("");
   document.getElementById("trackingDetailInfo").textContent = "Menampilkan " + contacts.length + " kontak";
