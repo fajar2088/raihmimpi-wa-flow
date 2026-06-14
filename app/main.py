@@ -238,11 +238,11 @@ def send_menu_utama(to_phone):
     message = menu.get("message", "Halo! Yuk donasi via Raihmimpi.")
     buttons_cfg = menu.get("buttons", [])
     buttons = []
-    for b in buttons_cfg:
+    for i, b in enumerate(buttons_cfg):
         if not b.get("enabled"):
             continue
         action = b.get("action", "donasi")
-        btn_id = "btn_donasi" if action == "donasi" else "btn_admin"
+        btn_id = f"btn_{action}_{i}"
         buttons.append({"id": btn_id, "title": b.get("label", "")})
     if not buttons:
         buttons = [{"id": "btn_donasi", "title": "Mulai Donasi"}]
