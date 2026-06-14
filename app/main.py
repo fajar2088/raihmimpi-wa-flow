@@ -1884,7 +1884,36 @@ async function loadContacts() {
 }
 
 function renderItems() {
-  const filtered = allContacts.filter(c => (c.status || "perlu_dibalas") === currentTab);
+  let filtered = allContacts.filter(c => (c.status || "perlu_dibalas") === currentTab);
+
+  // Search
+  if (chatSearchQuery) {
+    filtered = filtered.filter(c =>
+      (c.name||"").toLowerCase().includes(chatSearchQuery) ||
+      (c.phone||"").includes(chatSearchQuery)
+    );
+  }
+  // Label filter
+  if (chatFilterLabel) {
+    filtered = filtered.filter(c => (c.labels||[]).includes(chatFilterLabel));
+  }
+  // Date filter
+  if (chatFilterDateFrom || chatFilterDateTo) {
+    filtered = filtered.filter(c => {
+      if (!c.last_message_at) return false;
+      const d = c.last_message_at.substring(0,10);
+      if (chatFilterDateFrom && d < chatFilterDateFrom) return false;
+      if (chatFilterDateTo && d > chatFilterDateTo) return false;
+      return true;
+    });
+  }
+  // Sort
+  filtered = filtered.slice().sort((a,b) => {
+    const ta = a.last_message_at || "";
+    const tb = b.last_message_at || "";
+    return chatSortOrder === "desc" ? tb.localeCompare(ta) : ta.localeCompare(tb);
+  });
+
   const el = document.getElementById("chatItems");
   if (!filtered.length) {
     el.innerHTML = `<div class="chat-empty">Tidak ada percakapan</div>`;
