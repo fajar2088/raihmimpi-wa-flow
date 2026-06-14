@@ -9,7 +9,7 @@ import requests
 from io import BytesIO
 from PIL import Image
 from datetime import datetime
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, send_file
 from pywa.utils import default_flow_request_decryptor, default_flow_response_encryptor
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -1300,6 +1300,93 @@ def api_blast():
         return jsonify({"blast_id": blast_id, "total": len(phones), "sent": sent_count, "results": results})
     except Exception as e:
         logger.error(f"api_blast error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/blast/template-download", methods=["GET"])
+def api_blast_template_download():
+    """Download template Excel untuk upload nomor blast."""
+    import io
+    try:
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "WA Blast"
+        ws.append(["Nama", "Nomor HP"])
+        ws.append(["Contoh Nama", "6281234567890"])
+        ws.append(["Donatur 2", "6289876543210"])
+        ws.column_dimensions["A"].width = 25
+        ws.column_dimensions["B"].width = 20
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        as_attachment=True, download_name="wablast_template.xlsx")
+    except ImportError:
+        # Fallback: CSV
+        import csv, io as sio
+        output = sio.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Nama", "Nomor HP"])
+        writer.writerow(["Contoh Nama", "6281234567890"])
+        writer.writerow(["Donatur 2", "6289876543210"])
+        output.seek(0)
+        return Response(output.getvalue(), mimetype="text/csv",
+                       headers={"Content-Disposition": "attachment;filename=wablast_template.csv"})
+
+@app.route("/api/blast/upload-contacts", methods=["POST"])
+def api_blast_upload_contacts():
+    """Upload file Excel/CSV berisi nomor HP untuk blast."""
+    try:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "File tidak ditemukan"}), 400
+
+        filename = file.filename.lower()
+        contacts = []
+
+        if filename.endswith(".csv"):
+            import csv, io
+            text = file.read().decode("utf-8", errors="ignore")
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                nama = row.get("Nama", row.get("nama", "")).strip()
+                phone = row.get("Nomor HP", row.get("nomor_hp", row.get("phone", ""))).strip()
+                phone = "".join(filter(str.isdigit, phone))
+                if phone:
+                    if phone.startswith("0"):
+                        phone = "62" + phone[1:]
+                    elif not phone.startswith("62"):
+                        phone = "62" + phone
+                    contacts.append({"name": nama or phone, "phone": phone})
+
+        elif filename.endswith(".xlsx") or filename.endswith(".xls"):
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file)
+                ws = wb.active
+                headers = [str(c.value).strip() if c.value else "" for c in next(ws.iter_rows())]
+                nama_idx = next((i for i, h in enumerate(headers) if "nama" in h.lower()), 0)
+                phone_idx = next((i for i, h in enumerate(headers) if "nomor" in h.lower() or "hp" in h.lower() or "phone" in h.lower()), 1)
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if not row or not row[phone_idx]:
+                        continue
+                    phone = "".join(filter(str.isdigit, str(row[phone_idx])))
+                    if not phone:
+                        continue
+                    if phone.startswith("0"):
+                        phone = "62" + phone[1:]
+                    elif not phone.startswith("62"):
+                        phone = "62" + phone
+                    nama = str(row[nama_idx]).strip() if row[nama_idx] else phone
+                    contacts.append({"name": nama, "phone": phone})
+            except ImportError:
+                return jsonify({"error": "openpyxl tidak terinstall. Gunakan format CSV."}), 400
+        else:
+            return jsonify({"error": "Format file harus .xlsx atau .csv"}), 400
+
+        return jsonify({"contacts": contacts, "total": len(contacts)})
+    except Exception as e:
+        logger.error(f"api_blast_upload_contacts error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/blast/history", methods=["GET"])
@@ -2905,6 +2992,23 @@ def whatsapp_page():
           </div>
         </div>
 
+        <!-- Upload Kontak dari Excel -->
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;background:#f9fafb;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#374151;">📥 Upload Nomor dari File Excel</div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button onclick="downloadBlastTemplate()" style="padding:8px 16px;border:1px solid #5b3df0;border-radius:8px;color:#5b3df0;background:#fff;cursor:pointer;font-size:13px;font-weight:600;">
+              ⬇ Download Template
+            </button>
+            <span style="font-size:12px;color:#9ca3af;">wablast_template.xlsx &nbsp;*Lakukan download template terlebih dahulu</span>
+          </div>
+          <div style="margin-top:10px;">
+            <label style="display:block;font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">File Upload Blast (.xlsx)</label>
+            <input type="file" id="blastFileUpload" accept=".xlsx,.xls,.csv" onchange="onBlastFileUpload(this)"
+              style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;">
+            <div id="blastFileMsg" style="font-size:12px;color:#16a34a;margin-top:4px;"></div>
+          </div>
+        </div>
+
         <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;font-size:12px;color:#92400e;margin-bottom:20px;">
           ⚠️ Jumlah maksimal karakter body adalah 1024 karakter, sudah termasuk parameter yang anda input.
         </div>
@@ -3862,6 +3966,63 @@ async function loadBlastLabels() {
     sel.innerHTML = '<option value="">-- Semua Kontak --</option>' +
       labels.map(l => `<option value="${l.name}">${l.name}</option>`).join("");
   } catch(e) {}
+}
+
+function downloadBlastTemplate() {
+  window.open("/api/blast/template-download", "_blank");
+}
+
+async function onBlastFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const msgEl = document.getElementById("blastFileMsg");
+  msgEl.style.color = "#6b7280";
+  msgEl.textContent = "Memproses file...";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/api/blast/upload-contacts", {method:"POST", body:formData});
+    const json = await res.json();
+    if (json.error) { msgEl.style.color="#dc2626"; msgEl.textContent="Error: "+json.error; return; }
+
+    const uploaded = json.contacts || [];
+    if (!uploaded.length) { msgEl.style.color="#dc2626"; msgEl.textContent="Tidak ada kontak valid di file."; return; }
+
+    // Gabungkan dengan kontak yang ada, hindari duplikat
+    const existingPhones = new Set(_blastAllContacts.map(c => c.phone));
+    const newContacts = uploaded.filter(c => !existingPhones.has(c.phone));
+
+    // Tambah kontak dari file ke daftar (mark sebagai uploaded)
+    const uploadedMarked = uploaded.map(c => ({...c, fromFile: true}));
+
+    // Render kontak dari file (ganti daftar kontak dengan yang dari file)
+    const el = document.getElementById("blastContacts");
+    const countEl = document.getElementById("blastCount");
+
+    el.innerHTML = uploadedMarked.map(c => `
+      <div class="blast-contact-item">
+        <input type="checkbox" class="blast-chk" value="${c.phone}" id="bchk_${c.phone}" checked>
+        <label for="bchk_${c.phone}" style="cursor:pointer;flex:1;">
+          <div style="font-size:13px;font-weight:600;">${c.name||c.phone}</div>
+          <div style="font-size:11px;color:#9ca3af;">+${c.phone}</div>
+        </label>
+        <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 6px;border-radius:4px;">dari file</span>
+      </div>
+    `).join("");
+
+    document.querySelectorAll(".blast-chk").forEach(chk => {
+      chk.addEventListener("change", updateBlastCount);
+    });
+    updateBlastCount();
+
+    msgEl.style.color = "#16a34a";
+    msgEl.textContent = `✓ ${uploaded.length} kontak berhasil dimuat dari file. Semua otomatis dipilih.`;
+  } catch(e) {
+    msgEl.style.color = "#dc2626";
+    msgEl.textContent = "Error: " + e.message;
+  }
 }
 
 function onScheduleChange(el) {
