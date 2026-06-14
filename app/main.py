@@ -1462,6 +1462,15 @@ def laporan_chat_harian():
           <input type="date" id="filterTo" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
         </div>
       </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Tipe</div>
+        <select id="filterTipe" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:180px;">
+          <option value="">(Semua)</option>
+          <option value="User Initiated">User Initiated</option>
+          <option value="Business Initiated">Business Initiated</option>
+          <option value="Ads">Ads</option>
+        </select>
+      </div>
       <button onclick="loadLaporan()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
       <button onclick="exportExcel()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
     </div>
@@ -1520,7 +1529,8 @@ function loadLaporan() {{
   var dt = document.getElementById("filterTo").value;
   var tbody = document.getElementById("laporanBody");
   tbody.innerHTML = "<tr><td colspan=6 style='padding:20px;text-align:center;color:#9ca3af;'>Memuat...</td></tr>";
-  fetch("/api/laporan/chat-harian?from=" + df + "&to=" + dt)
+  var tipe = document.getElementById("filterTipe") ? document.getElementById("filterTipe").value : "";
+  fetch("/api/laporan/chat-harian?from=" + df + "&to=" + dt + "&tipe=" + encodeURIComponent(tipe))
   .then(function(r) {{ return r.json(); }})
   .then(function(json) {{
     _laporanData = json.rows || [];
@@ -1838,6 +1848,7 @@ def api_laporan_chat_harian():
     """API laporan chat harian - 1 baris per kontak per hari."""
     date_from = request.args.get("from", "")
     date_to = request.args.get("to", "")
+    filter_tipe = request.args.get("tipe", "")
     
     inbox = load_inbox()
     contacts = inbox.get("contacts", {})
@@ -1906,6 +1917,10 @@ def api_laporan_chat_harian():
     business_initiated = sum(1 for r in rows if r["type"] == "Business Initiated")
     ads = sum(1 for r in rows if r["type"] == "Ads")
     
+    # Apply filter tipe jika ada
+    if filter_tipe:
+        rows = [r for r in rows if r["type"] == filter_tipe]
+
     total_contact = len(rows)
     total_unik = len(set(r["phone"] for r in rows))
 
