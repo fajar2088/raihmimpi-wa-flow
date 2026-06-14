@@ -1460,6 +1460,7 @@ def laporan_summary():
         <select id="groupBy" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:140px;">
           <option value="day">Day (Hari)</option>
           <option value="month">Month (Bulan)</option>
+          <option value="hour">Hour (Jam)</option>
         </select>
       </div>
       <div>
@@ -2132,6 +2133,10 @@ def api_laporan_summary():
                 if group_by == "month":
                     group_key = d.strftime("%Y-%m")
                     group_label = d.strftime("%B")
+                elif group_by == "hour":
+                    hour = dt_wib.hour
+                    group_key = f"{hour:02d}"
+                    group_label = f"{hour:02d}:00 - {hour:02d}:59"
                 else:
                     days_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
                     group_key = str(d.weekday())
@@ -2168,7 +2173,7 @@ def api_laporan_summary():
             # Day: unik = nomor yang PERTAMA KALI muncul di hari ini
             unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
         else:
-            # Month: unik = semua nomor yang aktif di bulan ini
+            # Month/Hour: unik = semua nomor yang aktif di periode ini
             unik_phones = list(phones_data.keys())
 
         jumlah_unik = len(unik_phones)
