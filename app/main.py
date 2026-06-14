@@ -1530,10 +1530,11 @@ def laporan_tracking_campaign():
               <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Ad ID</th>
               <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Type</th>
               <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Channel</th>
-              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Leads</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Contacts</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Lead Submitted</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">View Content</th>
               <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Add to Cart</th>
               <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Purchase</th>
-              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Contacts</th>
             </tr>
           </thead>
           <tbody id="trackingBody">
@@ -1590,31 +1591,34 @@ function loadTracking() {{
       return;
     }}
     var html = "";
-    var totLeads=0, totAtc=0, totPurchase=0, totContacts=0;
+    var totLeads=0, totAtc=0, totPurchase=0, totContacts=0, totVc=0;
     for (var i=0; i<_trackingData.length; i++) {{
       var c = _trackingData[i];
       totLeads += c.total_leads;
       totAtc += c.total_add_to_cart;
       totPurchase += c.total_purchase;
       totContacts += c.total_contacts;
+      totVc += (c.total_view_content||0);
       html += "<tr style='border-bottom:1px solid #f3f4f6;'>";
       html += "<td style='padding:12px 16px;'><span onclick='showTrackingDetail(" + i + ")' style='color:#5b3df0;cursor:pointer;font-weight:600;text-decoration:underline;'>" + c.campaign_name + "</span></td>";
       html += "<td style='padding:12px 16px;font-size:12px;color:#6b7280;'>" + (c.ad_id||"-") + "</td>";
       html += "<td style='padding:12px 16px;font-size:13px;'>" + c.type + "</td>";
       html += "<td style='padding:12px 16px;font-size:13px;'>" + c.channel + "</td>";
-      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;font-weight:600;color:#5b3df0;'>" + c.total_leads + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;font-weight:600;'>" + c.total_contacts + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#5b3df0;font-weight:600;'>" + c.total_leads + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#6b7280;'>" + (c.total_view_content||0) + "</td>";
       html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#d97706;'>" + c.total_add_to_cart + "</td>";
       html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#16a34a;font-weight:600;'>" + c.total_purchase + "</td>";
-      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + c.total_contacts + "</td>";
       html += "</tr>";
     }}
     // Total
     html += "<tr style='background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;'>";
     html += "<td style='padding:12px 16px;font-size:13px;' colspan=4>TOTAL</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + totContacts + "</td>";
     html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#5b3df0;'>" + totLeads + "</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#6b7280;'>" + totVc + "</td>";
     html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#d97706;'>" + totAtc + "</td>";
     html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#16a34a;'>" + totPurchase + "</td>";
-    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + totContacts + "</td>";
     html += "</tr>";
     tbody.innerHTML = html;
   }})
@@ -1653,9 +1657,9 @@ function backToTracking() {{
 
 function exportTracking() {{
   if (!_trackingData.length) {{ alert("Tidak ada data. Klik Submit dulu."); return; }}
-  var rows = [["Campaign Name","Ad ID","Type","Channel","Total Leads","Add to Cart","Purchase","Total Contacts"]];
+  var rows = [["Campaign Name","Ad ID","Type","Channel","Total Contacts","Lead Submitted","View Content","Add to Cart","Purchase"]];
   _trackingData.forEach(function(c) {{
-    rows.push([c.campaign_name, c.ad_id, c.type, c.channel, c.total_leads, c.total_add_to_cart, c.total_purchase, c.total_contacts]);
+    rows.push([c.campaign_name, c.ad_id, c.type, c.channel, c.total_contacts, c.total_leads, c.total_view_content||0, c.total_add_to_cart, c.total_purchase]);
   }});
   var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
   var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
@@ -2949,10 +2953,11 @@ def api_laporan_tracking_campaign():
             "ad_id": cdata["ad_id"] or "-",
             "type": "META",
             "channel": "WHATSAPP",
+            "total_contacts": len(cdata["total_contacts_set"]),
             "total_leads": len(cdata["leads"]),
+            "total_view_content": len(cdata["view_content"]),
             "total_add_to_cart": len(cdata["add_to_cart"]),
             "total_purchase": len(cdata["purchase"]),
-            "total_contacts": len(cdata["phones"]),
             "contacts": cdata["contacts_detail"]
         })
 
