@@ -2169,12 +2169,12 @@ def api_laporan_summary():
         # Jumlah Contact = total baris (tiap nomor × hari aktif dalam group)
         jumlah_contact = sum(d.get("day_count", 1) for d in phones_data.values())
 
-        if group_by == "day":
-            # Day: unik = nomor yang PERTAMA KALI muncul di hari ini
-            unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
-        else:
-            # Month/Hour: unik = semua nomor yang aktif di periode ini
+        if group_by == "month":
+            # Month: unik = semua nomor yang aktif di bulan ini
             unik_phones = list(phones_data.keys())
+        else:
+            # Day/Hour: unik = nomor yang PERTAMA KALI muncul di group ini
+            unik_phones = [p for p in phones_data if phone_first_group.get(p) == group_key]
 
         jumlah_unik = len(unik_phones)
         sudah_label = sum(1 for p in unik_phones if phones_data[p]["labels"])
