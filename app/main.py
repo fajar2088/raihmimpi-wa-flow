@@ -1513,7 +1513,7 @@ def laporan_contact_label():
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
       <button onclick="backToList()" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:20px;font-weight:700;">←</button>
       <div>
-        <div style="font-size:18px;font-weight:800;" id="detailLabelName"></div>
+        <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;" id="detailLabelName"></div>
         <div style="font-size:13px;color:#6b7280;" id="detailPeriode"></div>
       </div>
       <button onclick="exportDetailLabel()" style="margin-left:auto;padding:8px 16px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
@@ -1592,7 +1592,7 @@ function showDetail(idx) {{
   document.getElementById("labelDetailView").style.display = "block";
   var df = document.getElementById("filterFrom").value;
   var dt = document.getElementById("filterTo").value;
-  document.getElementById("detailLabelName").innerHTML = "<span style='background:" + l.bg_color + ";color:" + l.text_color + ";padding:4px 12px;border-radius:8px;font-size:16px;'>" + l.name + "</span>";
+  document.getElementById("detailLabelName").innerHTML = "<span style='background:" + l.bg_color + ";color:" + l.text_color + ";padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;'>" + l.name + "</span>";
   document.getElementById("detailPeriode").textContent = "Periode: " + df + " sampai " + dt;
   var contacts = l.contacts || [];
   var tbody = document.getElementById("labelDetailBody");
