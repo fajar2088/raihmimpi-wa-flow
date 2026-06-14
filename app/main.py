@@ -1443,6 +1443,156 @@ def login_page():
 </body>
 </html>""", mimetype="text/html")
 
+@app.route("/laporan/chat-harian", methods=["GET"])
+@login_required
+def laporan_chat_harian():
+    today = datetime.now().strftime("%Y-%m-%d")
+    body = f"""
+  <!-- Filter -->
+  <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Filter Tanggal</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" id="filterFrom" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <span style="color:#9ca3af;">→</span>
+          <input type="date" id="filterTo" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+        </div>
+      </div>
+      <button onclick="loadLaporan()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cari</button>
+      <button onclick="exportExcel()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:180px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total User Initiated</div>
+      <div style="font-size:28px;font-weight:800;color:#5b3df0;" id="totalUserInit">-</div>
+    </div>
+    <div style="background:#fff;border-radius:10px;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);flex:1;min-width:180px;">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">Total Business Initiated</div>
+      <div style="font-size:28px;font-weight:800;color:#16a34a;" id="totalBizInit">-</div>
+    </div>
+  </div>
+
+  <!-- Tabel -->
+  <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;min-width:700px;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Chat Date</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Nama User</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Nama</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Cell Phone</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Type</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;white-space:nowrap;">Kontak Label</th>
+          </tr>
+        </thead>
+        <tbody id="laporanBody">
+          <tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Klik Cari untuk memuat data</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #f3f4f6;font-size:13px;color:#6b7280;" id="laporanInfo"></div>
+  </div>
+
+<script>
+let _laporanData = [];
+
+async function loadLaporan() {{
+  const from = document.getElementById("filterFrom").value;
+  const to = document.getElementById("filterTo").value;
+  const tbody = document.getElementById("laporanBody");
+  tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#9ca3af;">Memuat...</td></tr>';
+
+  try {{
+    const res = await fetch("/api/laporan/chat-harian?from=" + from + "&to=" + to);
+    const json = await res.json();
+    _laporanData = json.rows || [];
+
+    document.getElementById("totalUserInit").textContent = json.user_initiated || 0;
+    document.getElementById("totalBizInit").textContent = json.business_initiated || 0;
+
+    if (!_laporanData.length) {{
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:40px;text-align:center;color:#9ca3af;">Tidak ada data pada rentang tanggal ini.</td></tr>';
+      document.getElementById("laporanInfo").textContent = "";
+      return;
+    }}
+
+    // Group by kontak (tampilkan 1 baris per kontak per hari)
+    const seen = new Set();
+    const unique = [];
+    for (const r of _laporanData) {{
+      const key = r.chat_date + "_" + r.phone;
+      if (!seen.has(key)) {{
+        seen.add(key);
+        unique.push(r);
+      }}
+    }}
+
+    tbody.innerHTML = unique.map(r => {{
+      const typeColor = r.type === "User Initiated" ? "#2563eb" : "#16a34a";
+      const labels = (r.labels||[]).map(l =>
+        `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:#e0d9ff;color:#5b3df0;margin:1px;">${{l}}</span>`
+      ).join("") || "-";
+      return `<tr style="border-bottom:1px solid #f3f4f6;">
+        <td style="padding:12px 16px;font-size:13px;white-space:nowrap;">${{r.chat_date}}</td>
+        <td style="padding:12px 16px;font-size:13px;">${{r.nama_user}}</td>
+        <td style="padding:12px 16px;font-size:13px;font-weight:600;">${{r.nama}}</td>
+        <td style="padding:12px 16px;font-size:13px;color:#6b7280;">+${{r.phone}}</td>
+        <td style="padding:12px 16px;">
+          <span style="font-size:12px;font-weight:600;color:${{typeColor}}">${{r.type}}</span>
+        </td>
+        <td style="padding:12px 16px;">${{labels}}</td>
+      </tr>`;
+    }}).join("");
+
+    document.getElementById("laporanInfo").textContent =
+      "Menampilkan " + unique.length + " kontak dari " + _laporanData.length + " total pesan";
+  }} catch(e) {{
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;color:#dc2626;">Gagal memuat data.</td></tr>';
+  }}
+}}
+
+function exportExcel() {{
+  if (!_laporanData.length) {{ alert("Tidak ada data untuk diexport. Klik Cari dulu."); return; }}
+
+  // Buat CSV
+  const seen = new Set();
+  const unique = [];
+  for (const r of _laporanData) {{
+    const key = r.chat_date + "_" + r.phone;
+    if (!seen.has(key)) {{ seen.add(key); unique.push(r); }}
+  }}
+
+  const headers = ["Chat Date","Nama User","Nama","Cell Phone","Type","Kontak Label"];
+  const rows = unique.map(r => [
+    r.chat_date,
+    r.nama_user,
+    r.nama,
+    "+" + r.phone,
+    r.type,
+    (r.labels||[]).join(", ")
+  ]);
+
+  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(",")).join("\n");
+  const blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "laporan_chat_" + document.getElementById("filterFrom").value + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}}
+
+// Auto load hari ini
+loadLaporan();
+</script>
+"""
+    return Response(render_page("laporan", "Laporan Chat Harian", "", body), mimetype="text/html")
+
 @app.route("/pengaturan/pengguna", methods=["GET"])
 @admin_required
 def pengguna_page():
@@ -1690,6 +1840,63 @@ def api_users_delete(user_id):
     users = [u for u in users if u["id"] != user_id]
     save_users(users)
     return jsonify({"status": "deleted"})
+
+@app.route("/api/laporan/chat-harian", methods=["GET"])
+@login_required
+def api_laporan_chat_harian():
+    """API laporan chat harian - semua percakapan dalam rentang tanggal."""
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    
+    inbox = load_inbox()
+    contacts = inbox.get("contacts", {})
+    messages_db = inbox.get("messages", {})
+    
+    rows = []
+    for phone, contact in contacts.items():
+        msgs = messages_db.get(phone, [])
+        if not msgs:
+            # Coba ambil dari contact langsung
+            msgs = contact.get("messages", [])
+        
+        for msg in msgs:
+            ts = msg.get("timestamp", "")
+            if not ts:
+                continue
+            date_part = ts[:10]
+            if date_from and date_part < date_from:
+                continue
+            if date_to and date_part > date_to:
+                continue
+            
+            direction = msg.get("direction", "in")
+            msg_type = "User Initiated" if direction == "in" else "Business Initiated"
+            
+            rows.append({
+                "chat_date": date_part,
+                "chat_datetime": ts[:16].replace("T", " "),
+                "nama_user": session.get("user_nama", "-"),
+                "nama": contact.get("name", phone),
+                "phone": phone,
+                "type": msg_type,
+                "labels": contact.get("labels", []),
+                "text": msg.get("text", "")[:100],
+                "direction": direction
+            })
+    
+    # Sort by datetime desc
+    rows.sort(key=lambda x: x["chat_datetime"], reverse=True)
+    
+    # Hitung summary
+    user_initiated = sum(1 for r in rows if r["direction"] == "in")
+    business_initiated = sum(1 for r in rows if r["direction"] == "out")
+    
+    return jsonify({
+        "rows": rows,
+        "total": len(rows),
+        "user_initiated": user_initiated,
+        "business_initiated": business_initiated
+    })
 
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
@@ -1978,6 +2185,7 @@ def render_sidebar(active):
         ("chat", "/chat", "&#x1F4AC;", "Chat"),
         ("kampanye", "/kampanye", "&#x1F3AF;", "Kampanye"),
         ("whatsapp", "/whatsapp", "WA", "WhatsApp"),
+        ("laporan", "/laporan/chat-harian", "&#x1F4CA;", "Laporan"),
     ]
     html_links = ""
     for key, url, icon, label in items:
