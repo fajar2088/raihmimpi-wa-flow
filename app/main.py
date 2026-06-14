@@ -1505,12 +1505,12 @@ def laporan_chat_harian():
 var _laporanData = [];
 
 function loadLaporan() {
-  var from = document.getElementById("filterFrom").value;
-  var to = document.getElementById("filterTo").value;
+  var dateFrom = document.getElementById("filterFrom").value;
+  var dateTo = document.getElementById("filterTo").value;
   var tbody = document.getElementById("laporanBody");
   tbody.innerHTML = "<tr><td colspan=\"6\" style=\"padding:20px;text-align:center;color:#9ca3af;\">Memuat...</td></tr>";
 
-  fetch("/api/laporan/chat-harian?from=" + from + "&to=" + to)
+  fetch("/api/laporan/chat-harian?from=" + dateFrom + "&to=" + dateTo)
   .then(function(res) { return res.json(); })
   .then(function(json) {
     _laporanData = json.rows || [];
