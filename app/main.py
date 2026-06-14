@@ -1309,7 +1309,8 @@ LAYOUT_CSS = """
     .mobile-back-btn { display:flex !important; }
     .main { padding:12px; }
   }
-  .mobile-back-btn { display:none; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid #eee; cursor:pointer; font-size:14px; color:#5b3df0; font-weight:600; background:#fff; }
+  .mobile-back-btn { display:none; }
+  @media (max-width: 768px) { .mobile-back-btn { display:inline-flex !important; } }
   .chat-tabs { display:flex; gap:8px; padding:12px; border-bottom:1px solid #eee; }
   .chat-tab { flex:1; text-align:center; padding:8px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:#f3f4f8; color:#6b7280; }
   .chat-tab.active { background:#5b3df0; color:#fff; }
@@ -1950,20 +1951,10 @@ async function openChat(phone) {
 
   const panel = document.getElementById("chatPanel");
   panel.innerHTML = `
-    <div class="mobile-back-btn" onclick="closeChatMobile()">
-      ← Kembali
-    </div>
     <div class="chat-header" style="position:relative;background:#5b3df0;padding:12px 16px;display:flex;align-items:center;gap:10px;">
-      <div class="chat-avatar" style="background:rgba(255,255,255,.2);color:#fff;">${initials(contact.name)}</div>
+      <span class="mobile-back-btn" onclick="closeChatMobile()" style="color:#fff;font-size:22px;cursor:pointer;padding:0 8px 0 0;display:none;">‹</span>
       <div style="flex:1;min-width:0;">
-        <div class="chat-header-name" style="color:#fff;font-size:15px;">${contact.name || contact.phone}
-          ${(contact.labels && contact.labels.length) ? contact.labels.map(l => {
-            const lab = (window._labelAllLabels||[]).find(x=>x.name===l);
-            const bg = lab ? lab.bg_color||"#fff" : "#fff";
-            const col = lab ? lab.text_color||"#5b3df0" : "#5b3df0";
-            return `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${bg};color:${col};margin-left:4px;">${l}</span>`;
-          }).join("") : ""}
-        </div>
+        <div class="chat-header-name" style="color:#fff;font-size:15px;font-weight:700;">${contact.name || contact.phone}</div>
         <div class="chat-header-phone" style="color:#c4b5fd;font-size:12px;">+${contact.phone}</div>
       </div>
       <div style="position:relative;">
