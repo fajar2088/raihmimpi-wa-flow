@@ -1411,8 +1411,8 @@ def render_page(active, title, subtitle, body_html, extra_head=""):
 <body>
 {render_sidebar(active)}
 <div class="main">
-  <h1>{title}</h1>
-  <div class="subtitle">{subtitle}</div>
+  {f'<h1>{title}</h1>' if title else ''}
+  {f'<div class="subtitle">{subtitle}</div>' if subtitle else ''}
   {body_html}
 </div>
 </body>
@@ -1953,14 +1953,21 @@ async function openChat(phone) {
     <div class="mobile-back-btn" onclick="closeChatMobile()">
       ← Kembali
     </div>
-    <div class="chat-header" style="position:relative;">
-      <div class="chat-avatar">${initials(contact.name)}</div>
-      <div style="flex:1;">
-        <div class="chat-header-name">${contact.name || contact.phone}</div>
-        <div class="chat-header-phone">+${contact.phone}</div>
+    <div class="chat-header" style="position:relative;background:#5b3df0;padding:12px 16px;display:flex;align-items:center;gap:10px;">
+      <div class="chat-avatar" style="background:rgba(255,255,255,.2);color:#fff;">${initials(contact.name)}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="chat-header-name" style="color:#fff;font-size:15px;">${contact.name || contact.phone}
+          ${(contact.labels && contact.labels.length) ? contact.labels.map(l => {
+            const lab = (window._labelAllLabels||[]).find(x=>x.name===l);
+            const bg = lab ? lab.bg_color||"#fff" : "#fff";
+            const col = lab ? lab.text_color||"#5b3df0" : "#5b3df0";
+            return `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${bg};color:${col};margin-left:4px;">${l}</span>`;
+          }).join("") : ""}
+        </div>
+        <div class="chat-header-phone" style="color:#c4b5fd;font-size:12px;">+${contact.phone}</div>
       </div>
       <div style="position:relative;">
-        <button onclick="toggleContactMenu(event)" id="contactMenuBtn" style="background:transparent;border:1px solid #e5e7eb;color:#4b5563;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;" title="Aksi kontak">⋮</button>
+        <button onclick="toggleContactMenu(event)" id="contactMenuBtn" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;" title="Aksi kontak">⋮</button>
         <div id="contactMenuDropdown" style="display:none;position:absolute;right:0;top:42px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);min-width:180px;z-index:100;overflow:hidden;">
           <div onclick="resetMenuContact('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">↻ Reset Menu</div>
           <div onclick="markResolved('${contact.phone}')" style="padding:10px 14px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">✓ Selesai</div>
@@ -2564,7 +2571,7 @@ setInterval(() => {
 }, 15000);
 </script>
 """
-    return Response(render_page("chat", "Chat", "", body), mimetype="text/html")
+    return Response(render_page("chat", "", "", body), mimetype="text/html")
 
 
 @app.route("/whatsapp", methods=["GET"])
