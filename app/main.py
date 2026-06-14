@@ -1490,6 +1490,194 @@ def login_page():
 </body>
 </html>""", mimetype="text/html")
 
+@app.route("/laporan/tracking-campaign", methods=["GET"])
+@login_required
+def laporan_tracking_campaign():
+    today = datetime.now().strftime("%Y-%m-%d")
+    first_month = datetime.now().strftime("%Y-%m-01")
+    body = f"""
+  <!-- Filter -->
+  <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Tracking Period</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" id="filterFrom" value="{first_month}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+          <span style="color:#9ca3af;">→</span>
+          <input type="date" id="filterTo" value="{today}" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;">
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:6px;">Campaign Name</div>
+        <input type="text" id="searchCampaign" placeholder="Cari campaign..." style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;min-width:180px;">
+      </div>
+      <button onclick="loadTracking()" style="padding:8px 20px;background:#5b3df0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Submit</button>
+      <button onclick="exportTracking()" style="padding:8px 20px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+  </div>
+
+  <!-- List View -->
+  <div id="trackingListView">
+    <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:800px;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Campaign Name</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Ad ID</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Type</th>
+              <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Channel</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Leads</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Add to Cart</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Purchase</th>
+              <th style="padding:12px 16px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Total Contacts</th>
+            </tr>
+          </thead>
+          <tbody id="trackingBody">
+            <tr><td colspan="8" style="padding:40px;text-align:center;color:#9ca3af;">Klik Submit untuk memuat data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail View -->
+  <div id="trackingDetailView" style="display:none;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <button onclick="backToTracking()" style="background:none;border:none;cursor:pointer;color:#5b3df0;font-size:20px;font-weight:700;">←</button>
+      <div>
+        <div style="font-size:18px;font-weight:800;" id="detailCampaignName"></div>
+        <div style="font-size:13px;color:#6b7280;" id="detailCampaignPeriode"></div>
+      </div>
+      <button onclick="exportDetailTracking()" style="margin-left:auto;padding:8px 16px;background:#fff;color:#5b3df0;border:1px solid #5b3df0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Export to Excel</button>
+    </div>
+    <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f9fafb;">
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Nama</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">No. Handphone</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">First Interaction Message</th>
+            <th style="padding:12px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">Tanggal Interaction</th>
+          </tr>
+        </thead>
+        <tbody id="trackingDetailBody"></tbody>
+      </table>
+      <div style="padding:12px 16px;font-size:13px;color:#6b7280;border-top:1px solid #f3f4f6;" id="trackingDetailInfo"></div>
+    </div>
+  </div>
+
+<script>
+var _trackingData = [];
+var _currentCampaign = null;
+
+function loadTracking() {{
+  var df = document.getElementById("filterFrom").value;
+  var dt = document.getElementById("filterTo").value;
+  var sc = document.getElementById("searchCampaign").value;
+  var tbody = document.getElementById("trackingBody");
+  tbody.innerHTML = "<tr><td colspan=8 style='padding:20px;text-align:center;color:#9ca3af;'>Memuat...</td></tr>";
+
+  fetch("/api/laporan/tracking-campaign?from=" + df + "&to=" + dt + "&campaign=" + encodeURIComponent(sc))
+  .then(function(r) {{ return r.json(); }})
+  .then(function(json) {{
+    _trackingData = json.campaigns || [];
+    if (!_trackingData.length) {{
+      tbody.innerHTML = "<tr><td colspan=8 style='padding:40px;text-align:center;color:#9ca3af;'>Tidak ada data campaign.</td></tr>";
+      return;
+    }}
+    var html = "";
+    var totLeads=0, totAtc=0, totPurchase=0, totContacts=0;
+    for (var i=0; i<_trackingData.length; i++) {{
+      var c = _trackingData[i];
+      totLeads += c.total_leads;
+      totAtc += c.total_add_to_cart;
+      totPurchase += c.total_purchase;
+      totContacts += c.total_contacts;
+      html += "<tr style='border-bottom:1px solid #f3f4f6;'>";
+      html += "<td style='padding:12px 16px;'><span onclick='showTrackingDetail(" + i + ")' style='color:#5b3df0;cursor:pointer;font-weight:600;text-decoration:underline;'>" + c.campaign_name + "</span></td>";
+      html += "<td style='padding:12px 16px;font-size:12px;color:#6b7280;'>" + (c.ad_id||"-") + "</td>";
+      html += "<td style='padding:12px 16px;font-size:13px;'>" + c.type + "</td>";
+      html += "<td style='padding:12px 16px;font-size:13px;'>" + c.channel + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;font-weight:600;color:#5b3df0;'>" + c.total_leads + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#d97706;'>" + c.total_add_to_cart + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#16a34a;font-weight:600;'>" + c.total_purchase + "</td>";
+      html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + c.total_contacts + "</td>";
+      html += "</tr>";
+    }}
+    // Total
+    html += "<tr style='background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;'>";
+    html += "<td style='padding:12px 16px;font-size:13px;' colspan=4>TOTAL</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#5b3df0;'>" + totLeads + "</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#d97706;'>" + totAtc + "</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;color:#16a34a;'>" + totPurchase + "</td>";
+    html += "<td style='padding:12px 16px;text-align:center;font-size:13px;'>" + totContacts + "</td>";
+    html += "</tr>";
+    tbody.innerHTML = html;
+  }})
+  .catch(function() {{
+    tbody.innerHTML = "<tr><td colspan=8 style='color:#dc2626;padding:20px;'>Gagal memuat.</td></tr>";
+  }});
+}}
+
+function showTrackingDetail(idx) {{
+  var c = _trackingData[idx];
+  if (!c) return;
+  _currentCampaign = c;
+  document.getElementById("trackingListView").style.display = "none";
+  document.getElementById("trackingDetailView").style.display = "block";
+  document.getElementById("detailCampaignName").textContent = "Laporan Tracking Campaign - " + c.campaign_name;
+  var df = document.getElementById("filterFrom").value;
+  var dt = document.getElementById("filterTo").value;
+  document.getElementById("detailCampaignPeriode").textContent = "Periode: " + df + " sampai " + dt;
+  var contacts = c.contacts || [];
+  var tbody = document.getElementById("trackingDetailBody");
+  tbody.innerHTML = contacts.map(function(ct) {{
+    return "<tr style='border-bottom:1px solid #f3f4f6;'>" +
+      "<td style='padding:12px 16px;font-size:13px;font-weight:600;'>" + ct.nama + "</td>" +
+      "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + ct.phone + "</td>" +
+      "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + (ct.first_msg||"-") + "</td>" +
+      "<td style='padding:12px 16px;font-size:13px;color:#6b7280;'>" + (ct.first_date||"-") + "</td>" +
+      "</tr>";
+  }}).join("");
+  document.getElementById("trackingDetailInfo").textContent = "Menampilkan " + contacts.length + " kontak";
+}}
+
+function backToTracking() {{
+  document.getElementById("trackingDetailView").style.display = "none";
+  document.getElementById("trackingListView").style.display = "block";
+}}
+
+function exportTracking() {{
+  if (!_trackingData.length) {{ alert("Tidak ada data. Klik Submit dulu."); return; }}
+  var rows = [["Campaign Name","Ad ID","Type","Channel","Total Leads","Add to Cart","Purchase","Total Contacts"]];
+  _trackingData.forEach(function(c) {{
+    rows.push([c.campaign_name, c.ad_id, c.type, c.channel, c.total_leads, c.total_add_to_cart, c.total_purchase, c.total_contacts]);
+  }});
+  var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href=url; a.download="tracking_campaign.csv"; a.click();
+  URL.revokeObjectURL(url);
+}}
+
+function exportDetailTracking() {{
+  if (!_currentCampaign) return;
+  var contacts = _currentCampaign.contacts || [];
+  var rows = [["Nama","No. Handphone","First Interaction Message","Tanggal Interaction"]];
+  contacts.forEach(function(c) {{ rows.push([c.nama, c.phone, c.first_msg||"", c.first_date||""]); }});
+  var csv = rows.map(function(r) {{ return r.map(function(v) {{ return '"'+String(v).replace(/"/g,'""')+'"'; }}).join(","); }}).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {{type:"text/csv;charset=utf-8;"}});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href=url; a.download="detail_"+_currentCampaign.campaign_name+".csv"; a.click();
+  URL.revokeObjectURL(url);
+}}
+
+loadTracking();
+</script>
+"""
+    return Response(render_page("laporan-tracking", "Laporan Tracking Campaign", "", body), mimetype="text/html")
+
 @app.route("/laporan/contact-label", methods=["GET"])
 @login_required
 def laporan_contact_label():
@@ -2655,6 +2843,117 @@ def api_laporan_contact_label():
     total_label = len(result)
     return jsonify({"labels": result, "total_label": total_label})
 
+@app.route("/api/laporan/tracking-campaign", methods=["GET"])
+@login_required
+def api_laporan_tracking_campaign():
+    """API Laporan Tracking Campaign - dari label [bracket] + CTWA data."""
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    search_campaign = request.args.get("campaign", "").strip().lower()
+
+    inbox = load_inbox()
+    contacts = inbox.get("contacts", {})
+    messages_db = inbox.get("messages", {})
+    transaksi_all = load_data()
+
+    # Kumpulkan data per campaign (bracket label)
+    campaigns = {}  # campaign_name -> data
+
+    import re as _re
+
+    for phone, contact in contacts.items():
+        msgs = messages_db.get(phone, [])
+        if not msgs:
+            msgs = contact.get("messages", [])
+
+        # Cari pesan dengan bracket label dan dalam rentang tanggal
+        bracket_labels_found = []
+        first_msg_date = None
+        first_msg_text = None
+        ad_id = contact.get("ad_source_id", "") or ""
+        ctwa_clid = contact.get("ctwa_clid", "") or ""
+
+        for msg in sorted(msgs, key=lambda m: m.get("timestamp", "")):
+            ts = msg.get("timestamp", "")
+            if not ts:
+                continue
+            date_part = ts[:10]
+            if date_from and date_part < date_from:
+                continue
+            if date_to and date_part > date_to:
+                continue
+            text = msg.get("text", "") or ""
+            found = _re.findall(r'\[([^\[\]]+)\]', text)
+            if found:
+                bracket_labels_found = found
+                first_msg_date = date_part
+                first_msg_text = text
+                break
+
+        if not bracket_labels_found:
+            continue
+
+        for bl in bracket_labels_found:
+            bl = bl.strip()
+            if not bl:
+                continue
+            if search_campaign and search_campaign not in bl.lower():
+                continue
+
+            if bl not in campaigns:
+                campaigns[bl] = {
+                    "campaign_name": bl,
+                    "ad_id": ad_id,
+                    "phones": set(),
+                    "leads": set(),
+                    "add_to_cart": set(),
+                    "purchase": set(),
+                    "contacts_detail": []
+                }
+
+            if phone not in campaigns[bl]["phones"]:
+                campaigns[bl]["phones"].add(phone)
+                campaigns[bl]["leads"].add(phone)
+                if not campaigns[bl]["ad_id"] and ad_id:
+                    campaigns[bl]["ad_id"] = ad_id
+                campaigns[bl]["contacts_detail"].append({
+                    "nama": contact.get("name", phone),
+                    "phone": phone,
+                    "first_msg": first_msg_text[:50] if first_msg_text else "",
+                    "first_date": first_msg_date or "",
+                    "ad_id": ad_id,
+                    "ctwa_clid": ctwa_clid[:20] if ctwa_clid else ""
+                })
+
+    # Hitung Add to Cart dan Purchase dari transaksi
+    for t in transaksi_all:
+        phone = t.get("phone", "")
+        status = t.get("status", "")
+        # Cek apakah phone ini ada di campaign
+        for cname, cdata in campaigns.items():
+            if phone in cdata["phones"]:
+                cdata["add_to_cart"].add(phone)
+                if status == "lunas":
+                    cdata["purchase"].add(phone)
+
+    # Build result
+    result = []
+    for cname, cdata in campaigns.items():
+        result.append({
+            "campaign_name": cname,
+            "ad_id": cdata["ad_id"] or "-",
+            "type": "META",
+            "channel": "WHATSAPP",
+            "total_leads": len(cdata["leads"]),
+            "total_add_to_cart": len(cdata["add_to_cart"]),
+            "total_purchase": len(cdata["purchase"]),
+            "total_contacts": len(cdata["phones"]),
+            "contacts": cdata["contacts_detail"]
+        })
+
+    result.sort(key=lambda x: x["total_leads"], reverse=True)
+    return jsonify({"campaigns": result, "total": len(result)})
+
 @app.route("/api/blast/template-download", methods=["GET"])
 def api_blast_template_download():
     """Download template Excel untuk upload nomor blast."""
@@ -2968,6 +3267,7 @@ def render_sidebar(active):
         f'<a href="/laporan/chat-harian" style="{sub_link_style}"><span>&#x1F4AC;</span> Chat Harian</a>' +
         f'<a href="/laporan/summary" style="{sub_link_style}"><span>&#x1F4CB;</span> Summary</a>' +
         f'<a href="/laporan/contact-label" style="{sub_link_style}"><span>&#x1F3F7;</span> Contact Label</a>' +
+        f'<a href="/laporan/tracking-campaign" style="{sub_link_style}"><span>&#x1F4CA;</span> Tracking Campaign</a>' +
         '</div></details>'
     )
 
