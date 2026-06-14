@@ -943,7 +943,6 @@ def midtrans_callback():
                 donatur, kampanye, kampanye_id, nominal, phone = t.get("donatur",""), t.get("kampanye",""), t.get("kampanye_id",""), t.get("nominal",0), t.get("phone","")
                 break
         save_data(transaksi)
-        if final_status == "lunas" and phone:
         # AddToCart = transaksi masuk Midtrans (pending + lunas)
         if phone and final_status not in ("gagal",):
             try:
