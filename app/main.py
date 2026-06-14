@@ -2191,7 +2191,7 @@ async function reloadChatTemplates() {
     const sett = await settRes.json();
     const tmpl = await tmplRes.json();
     const chatTemplateNames = sett.wa_chat_templates || [];
-    _allWaTemplates = tmpl.templates || [];
+    _allWaTemplates = tmpl.templates || (tmpl.raw && tmpl.raw.data) || [];
     _chatTemplates = _allWaTemplates.filter(t => chatTemplateNames.includes(t.name) && t.status === "APPROVED");
     renderAttachTemplates();
   } catch(e) {}
