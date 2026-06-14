@@ -1304,10 +1304,10 @@ LAYOUT_CSS = """
     html { height: 100%; }
     body { height: 100%; overflow: hidden; }
     .main { padding:8px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; }
-    .chat-wrap { height:100%; border-radius:8px; position:relative; overflow:hidden; width:100%; flex:1; min-height:0; }
-    .chat-list { width:100%; border-right:none; position:absolute; top:0; left:0; right:0; bottom:0; z-index:10; background:#fff; transition:transform .25s; overflow:hidden; }
+    .chat-wrap { height:100%; border-radius:8px; overflow:hidden; width:100%; flex:1; min-height:0; }
+    .chat-list { width:100%; border-right:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:10; background:#fff; transition:transform .25s; overflow:hidden; }
     .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
-    .chat-panel { position:absolute; top:0; left:0; right:0; bottom:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column; overflow:hidden; }
+    .chat-panel { position:fixed; top:0; left:0; right:0; bottom:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; display:flex; flex-direction:column; overflow:hidden; }
     .chat-panel.show-mobile { transform:translateX(0); }
     .chat-header { flex-shrink:0; }
     .chat-messages { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
@@ -2463,6 +2463,26 @@ async function sendTemplateAttachment(templateName, language) {
 
 // Load saat halaman chat dibuka
 reloadChatTemplates();
+
+// ---- iOS/Chrome mobile keyboard handler ----
+// Saat keyboard muncul, visual viewport mengecil
+// Kita set height chat-panel dan scroll messages ke bawah
+if (window.visualViewport) {
+  function onViewportResize() {
+    if (window.innerWidth > 768) return;
+    const panel = document.getElementById("chatPanel");
+    const msgs = document.getElementById("chatMessages");
+    if (!panel) return;
+    const vh = window.visualViewport.height;
+    panel.style.height = vh + "px";
+    panel.style.top = window.visualViewport.offsetTop + "px";
+    if (msgs) {
+      setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
+    }
+  }
+  window.visualViewport.addEventListener("resize", onViewportResize);
+  window.visualViewport.addEventListener("scroll", onViewportResize);
+}
 
 function toggleAttachMenu(e) {
   e.stopPropagation();
