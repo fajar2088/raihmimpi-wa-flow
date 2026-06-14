@@ -3275,6 +3275,20 @@ def api_shortcuts_send(sc_id, phone):
         logger.error(f"api_shortcuts_send error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/test-templates", methods=["GET"])
+def api_test_templates():
+    """Debug: test fetch template dari Meta API."""
+    try:
+        resp = requests.get(
+            f"https://graph.facebook.com/v22.0/{WABA_ID}/message_templates",
+            params={"limit": 5, "fields": "name,status,category,components"},
+            headers={"Authorization": f"Bearer {WA_TOKEN}"},
+            timeout=15
+        )
+        return jsonify({"status": resp.status_code, "data": resp.json()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/labels", methods=["GET"])
 def labels_page():
     """Halaman manajemen master label."""
