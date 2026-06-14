@@ -1301,7 +1301,7 @@ LAYOUT_CSS = """
   .chat-wrap { display:flex; height:calc(100vh - 52px); background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .chat-list { width:340px; flex-shrink:0; border-right:1px solid #eee; display:flex; flex-direction:column; }
   @media (max-width: 768px) {
-    .chat-wrap { height:calc(100vh - 20px); border-radius:8px; position:relative; }
+    .chat-wrap { height:calc(100dvh - 20px); border-radius:8px; position:relative; }
     .chat-list { width:100%; border-right:none; position:absolute; inset:0; z-index:10; background:#fff; transition:transform .25s; }
     .chat-list.hidden-mobile { transform:translateX(-100%); pointer-events:none; }
     .chat-panel { position:absolute; inset:0; z-index:5; background:#fff; transform:translateX(100%); transition:transform .25s; }
@@ -1333,14 +1333,14 @@ LAYOUT_CSS = """
   .chat-header .chat-avatar { width:36px; height:36px; font-size:13px; }
   .chat-header-name { font-weight:700; font-size:15px; }
   .chat-header-phone { font-size:12px; color:#9ca3af; }
-  .chat-messages { flex:1; min-height:0; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; background:#f9fafb; }
+  .chat-messages { flex:1; min-height:0; overflow-y:auto; padding:20px 20px 8px; display:flex; flex-direction:column; gap:10px; background:#f9fafb; -webkit-overflow-scrolling:touch; }
   .chat-bubble { max-width:60%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.4; }
   .chat-bubble.in { background:#fff; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.06); }
   .chat-bubble.out { background:#f3f4f6; color:#1f2937; align-self:flex-end; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
   .chat-date-separator { align-self:center; background:#fff; border:1px solid #e5e7eb; color:#6b7280; font-size:12px; padding:6px 16px; border-radius:20px; margin:8px 0; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .chat-input-bar { display:flex; gap:8px; padding:14px 16px; border-top:1px solid #eee; align-items:center; position:relative; }
-  .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
+  .chat-input-bar { display:flex; gap:8px; padding:14px 16px; border-top:1px solid #eee; align-items:center; position:sticky; bottom:0; background:#fff; z-index:10; }
+  .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:16px; }
   .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
   .chat-input-bar button:hover { background:#4c30d9; }
   .shortcut-popup { position:absolute;bottom:70px;left:0;right:0;background:#fff;border-radius:12px 12px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.12);max-height:60vh;overflow-y:auto;z-index:300;display:none; }
@@ -1404,7 +1404,7 @@ def render_page(active, title, subtitle, body_html, extra_head=""):
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>{title} - Raihmimpi</title>
 {extra_head}
 <style>{LAYOUT_CSS}</style>
