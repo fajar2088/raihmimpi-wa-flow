@@ -1064,6 +1064,65 @@ def api_inbox_reply(phone):
         logger.error(f"api_inbox_reply error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/send-flow/<phone>", methods=["POST"])
+def api_send_flow(phone):
+    """Kirim Flow donasi ke kontak via attachment menu."""
+    try:
+        resp = send_wa_flow_message(phone)
+        record_outgoing_message(phone, "📋 Flow Donasi · Dikirim", msg_type="text")
+        return jsonify({"status": "sent", "wa_status": resp.status_code})
+    except Exception as e:
+        logger.error(f"api_send_flow error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/send-media/<phone>", methods=["POST"])
+def api_send_media(phone):
+    """Upload dan kirim media (document/image/video/audio) ke kontak via WhatsApp Cloud API."""
+    try:
+        file = request.files.get("file")
+        media_type = request.form.get("media_type", "document")
+        if not file:
+            return jsonify({"error": "file wajib diisi"}), 400
+
+        filename = file.filename or "file"
+        mime = file.content_type or "application/octet-stream"
+        file_bytes = file.read()
+
+        # Step 1: Upload media ke Meta
+        upload_url = f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/media"
+        upload_resp = requests.post(upload_url,
+            headers={"Authorization": f"Bearer {WA_TOKEN}"},
+            files={"file": (filename, file_bytes, mime)},
+            data={"messaging_product": "whatsapp", "type": mime},
+            timeout=30)
+        if not upload_resp.ok:
+            logger.error(f"Media upload failed: {upload_resp.text[:300]}")
+            return jsonify({"error": "Upload media gagal", "detail": upload_resp.text[:200]}), 500
+        media_id = upload_resp.json().get("id")
+
+        # Step 2: Kirim pesan media
+        if media_type == "image":
+            msg_payload = {"type": "image", "image": {"id": media_id}}
+            label = f"🖼 {filename}"
+        elif media_type == "audio":
+            msg_payload = {"type": "audio", "audio": {"id": media_id}}
+            label = f"🎵 {filename}"
+        else:
+            msg_payload = {"type": "document", "document": {"id": media_id, "filename": filename}}
+            label = f"📄 {filename}"
+
+        send_url = f"https://graph.facebook.com/v22.0/{WA_PHONE_NUMBER_ID}/messages"
+        send_resp = requests.post(send_url,
+            headers={"Authorization": f"Bearer {WA_TOKEN}", "Content-Type": "application/json"},
+            json={"messaging_product": "whatsapp", "to": phone, "recipient_type": "individual", **msg_payload},
+            timeout=15)
+        logger.info(f"api_send_media to={phone} type={media_type} file={filename} status={send_resp.status_code}")
+        record_outgoing_message(phone, label, msg_type=media_type)
+        return jsonify({"status": "sent", "wa_status": send_resp.status_code})
+    except Exception as e:
+        logger.error(f"api_send_media error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/inbox/<phone>/label", methods=["POST"])
 def api_inbox_label(phone):
     """Update label dan/atau status kontak."""
@@ -1252,10 +1311,18 @@ LAYOUT_CSS = """
   .chat-bubble.out { background:#f3f4f6; color:#1f2937; align-self:flex-end; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .chat-bubble-time { font-size:10px; opacity:.6; margin-top:4px; text-align:right; }
   .chat-date-separator { align-self:center; background:#fff; border:1px solid #e5e7eb; color:#6b7280; font-size:12px; padding:6px 16px; border-radius:20px; margin:8px 0; box-shadow:0 1px 2px rgba(0,0,0,.04); }
-  .chat-input-bar { display:flex; gap:10px; padding:14px 16px; border-top:1px solid #eee; }
+  .chat-input-bar { display:flex; gap:8px; padding:14px 16px; border-top:1px solid #eee; align-items:center; position:relative; }
   .chat-input-bar input { flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:14px; }
   .chat-input-bar button { background:#5b3df0; color:#fff; border:none; border-radius:20px; padding:10px 22px; font-weight:600; font-size:14px; cursor:pointer; }
   .chat-input-bar button:hover { background:#4c30d9; }
+  .attach-btn { background:#f3f4f6; border:none; border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#5b3df0; transition:background .15s; }
+  .attach-btn:hover { background:#e0e7ff; }
+  .attach-menu { position:absolute; bottom:70px; left:16px; background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.13); min-width:220px; overflow:hidden; z-index:200; display:none; }
+  .attach-menu.open { display:block; }
+  .attach-menu-item { display:flex; align-items:center; gap:12px; padding:13px 18px; cursor:pointer; font-size:14px; color:#1f2937; transition:background .1s; border-bottom:1px solid #f3f4f6; }
+  .attach-menu-item:last-child { border-bottom:none; }
+  .attach-menu-item:hover { background:#f9fafb; }
+  .attach-menu-item span.icon { font-size:20px; width:28px; text-align:center; }
 
   /* Pengaturan */
   .settings-tabs { display:flex; gap:10px; margin-bottom:20px; }
@@ -1694,6 +1761,21 @@ async function openChat(phone) {
     </div>
     <div class="chat-messages" id="chatMessages"></div>
     <div class="chat-input-bar">
+      <div id="attachMenu" class="attach-menu">
+        <div class="attach-menu-item" onclick="sendFlowAttachment()">
+          <span class="icon">📋</span><span>Flow Donasi</span>
+        </div>
+        <div class="attach-menu-item" onclick="sendMediaAttachment('document')">
+          <span class="icon">📄</span><span>Document</span>
+        </div>
+        <div class="attach-menu-item" onclick="sendMediaAttachment('image')">
+          <span class="icon">🖼</span><span>Media Image/Video</span>
+        </div>
+        <div class="attach-menu-item" onclick="sendMediaAttachment('audio')">
+          <span class="icon">🎵</span><span>Media Audio</span>
+        </div>
+      </div>
+      <button class="attach-btn" onclick="toggleAttachMenu(event)" title="Lampiran">＋</button>
       <input type="text" id="chatInput" placeholder="Tulis balasan..." onkeydown="if(event.key==='Enter') sendReply()">
       <button onclick="sendReply()">Kirim</button>
     </div>
@@ -1964,6 +2046,83 @@ async function blokirContact(phone) {
   } catch (e) {
     alert("Error: " + e.message);
   }
+}
+
+function toggleAttachMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById("attachMenu");
+  menu.classList.toggle("open");
+}
+document.addEventListener("click", function() {
+  const menu = document.getElementById("attachMenu");
+  if (menu) menu.classList.remove("open");
+});
+
+async function sendFlowAttachment() {
+  document.getElementById("attachMenu").classList.remove("open");
+  if (!currentPhone) return;
+  try {
+    const res = await fetch("/api/send-flow/" + currentPhone, {method:"POST"});
+    const json = await res.json();
+    if (json.status === "sent") {
+      // Refresh pesan
+      openChat(currentPhone);
+    } else {
+      alert("Gagal kirim Flow: " + (json.error || "unknown"));
+    }
+  } catch(e) {
+    alert("Error: " + e.message);
+  }
+}
+
+async function sendMediaAttachment(mediaType) {
+  document.getElementById("attachMenu").classList.remove("open");
+  if (!currentPhone) return;
+
+  // Label & accept per jenis
+  const cfg = {
+    document: {label:"Pilih Dokumen", accept:".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"},
+    image:    {label:"Pilih Gambar/Video", accept:"image/*,video/*"},
+    audio:    {label:"Pilih Audio", accept:"audio/*,.mp3,.ogg,.m4a,.aac"},
+  };
+  const {label, accept} = cfg[mediaType] || cfg.document;
+
+  // Buat file input sementara
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = accept;
+  fileInput.style.display = "none";
+  document.body.appendChild(fileInput);
+
+  fileInput.onchange = async function() {
+    const file = fileInput.files[0];
+    document.body.removeChild(fileInput);
+    if (!file) return;
+
+    // Upload ke /api/send-media/<phone>
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("media_type", mediaType);
+
+    try {
+      const loadingEl = document.createElement("div");
+      loadingEl.style.cssText = "position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#5b3df0;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;";
+      loadingEl.textContent = "Mengirim " + file.name + "...";
+      document.body.appendChild(loadingEl);
+
+      const res = await fetch("/api/send-media/" + currentPhone, {method:"POST", body:formData});
+      const json = await res.json();
+      document.body.removeChild(loadingEl);
+      if (json.status === "sent") {
+        openChat(currentPhone);
+      } else {
+        alert("Gagal kirim: " + (json.error || "unknown"));
+      }
+    } catch(e) {
+      alert("Error upload: " + e.message);
+    }
+  };
+  fileInput.click();
 }
 
 async function sendReply() {
