@@ -2180,6 +2180,7 @@ def api_laporan_summary():
             "group_label": group_label,
             "jumlah_contact": jumlah_contact,
             "jumlah_unik": jumlah_unik,
+            "sudah_label": sudah_label,
             "pct_label": pct_label,
             "labels": label_counts
         })
