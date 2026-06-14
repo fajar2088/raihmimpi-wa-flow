@@ -1547,8 +1547,8 @@ function loadSummary() {{
       html += "</tr>";
     }}
 
-    // Total row
-    var totPct = totUnik > 0 ? Math.round(Object.values(totLabel).reduce(function(a,b){{return a+b;}},0) / totUnik * 10) / 10 : 0;
+    totUnik = json.total_unik_all || totUnik;
+    var totPct = json.total_pct_all || 0;
     html += "<tr style='background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb;'>";
     html += "<td style='padding:12px 16px;font-size:13px;'>TOTAL</td>";
     html += "<td style='padding:12px 16px;font-size:13px;text-align:center;'>" + totContact + "</td>";
