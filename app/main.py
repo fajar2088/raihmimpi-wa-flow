@@ -1665,6 +1665,16 @@ let currentTab = "perlu_dibalas";
 let currentPhone = null;
 let allContacts = [];
 
+// Load master labels untuk render warna di contact list
+window._labelAllLabels = [];
+(async function() {
+  try {
+    const res = await fetch("/api/labels");
+    const json = await res.json();
+    window._labelAllLabels = json.labels || [];
+  } catch(e) {}
+})();
+
 function initials(name) {
   if (!name) return "?";
   const parts = name.trim().split(" ");
